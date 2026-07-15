@@ -19,7 +19,11 @@ class ReleaseBuildTests(unittest.TestCase):
         repo = root / "fixture-repo"
         (repo / "scripts").mkdir(parents=True)
         shutil.copy2(BUILDER, repo / "scripts/build_release.py")
-        shutil.copytree(ROOT / "codex-grok-search", repo / "codex-grok-search")
+        shutil.copytree(
+            ROOT / "codex-grok-search",
+            repo / "codex-grok-search",
+            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+        )
         subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
         subprocess.run(["git", "add", "scripts", "codex-grok-search"], cwd=repo, check=True)
         subprocess.run(

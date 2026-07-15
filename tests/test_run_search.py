@@ -1353,10 +1353,7 @@ time.sleep(10)
             snapshot.chmod(0o500)
             command = [str(snapshot), "--sandbox", run_search.SANDBOX_PROFILE]
             snapshot_identity = run_search.grok_snapshot_identity(str(snapshot))
-            with patch("run_search.sys.platform", "darwin"), patch(
-                "run_search.Path.stat",
-                return_value=SimpleNamespace(st_mode=stat.S_IFREG | 0o755, st_uid=0),
-            ):
+            with patch("run_search.sys.platform", "darwin"):
                 wrapped = run_search._contained_command(command)
                 native = run_search._contained_command(
                     command,
