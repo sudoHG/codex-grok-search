@@ -15,6 +15,9 @@ RELEASE_INSTALL_START = "<!-- BEGIN RELEASE INSTALL -->"
 RELEASE_INSTALL_END = "<!-- END RELEASE INSTALL -->"
 UNINSTALL_START = "<!-- BEGIN UNINSTALL -->"
 UNINSTALL_END = "<!-- END UNINSTALL -->"
+INSTALL_URL = (
+    "https://github.com/sudoHG/codex-grok-search/tree/main/codex-grok-search"
+)
 
 
 def install_script() -> str:
@@ -44,9 +47,9 @@ def marked_script(path: Path, start: str, end: str) -> str:
 
 
 class InstallDocumentationTests(unittest.TestCase):
-    def test_english_manual_commands_match_chinese_source_of_truth(self):
-        english = ROOT / "README.en.md"
-        self.assertTrue(english.is_file())
+    def test_chinese_manual_commands_match_default_english_readme(self):
+        chinese = ROOT / "README.zh-CN.md"
+        self.assertTrue(chinese.is_file())
         for start, end in (
             (INSTALL_START, INSTALL_END),
             (RELEASE_INSTALL_START, RELEASE_INSTALL_END),
@@ -55,8 +58,25 @@ class InstallDocumentationTests(unittest.TestCase):
             with self.subTest(marker=start):
                 self.assertEqual(
                     marked_script(ROOT / "README.md", start, end),
-                    marked_script(english, start, end),
+                    marked_script(chinese, start, end),
                 )
+
+    def test_readmes_use_real_install_url_without_draft_placeholders(self):
+        readmes = [
+            (ROOT / "README.md").read_text(encoding="utf-8"),
+            (ROOT / "README.zh-CN.md").read_text(encoding="utf-8"),
+        ]
+        forbidden = (
+            "<GitHub 上 codex-grok-search 目录的链接>",
+            "<URL of the codex-grok-search directory on GitHub>",
+            "占位内容",
+            "placeholder above",
+            "public GitHub repository does not exist yet",
+        )
+        for readme in readmes:
+            self.assertIn(INSTALL_URL, readme)
+            for snippet in forbidden:
+                self.assertNotIn(snippet, readme)
 
     def prepare(self, root: Path, validator_exit: int = 0):
         project = root / "project"

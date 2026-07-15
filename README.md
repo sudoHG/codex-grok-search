@@ -1,145 +1,143 @@
 # codex-grok-search
 
-[English](README.en.md) | 简体中文
+[简体中文](README.zh-CN.md) | English
 
-让 Codex 调用你本机已经登录的 Grok Build，为 X、Reddit 和公开网页调研补上实时社区搜索与交叉验证能力。
+Let Codex call the Grok Build CLI already authenticated on your machine to add real-time community search and cross-checking across X, Reddit, and the public web.
 
-Codex 负责理解任务、设计检索和整理结论；Grok 负责发现 X、Reddit 与网页上的公开内容；本地脚本负责校验输出、核对 Reddit 日期并保留可追溯的结果。它不是用 Grok 替代 Codex，而是让两者各自做更擅长的部分。
+Codex frames the task, designs the research, and synthesizes the answer. Grok discovers public content on X, Reddit, and the web. Local scripts validate the output, verify Reddit dates, and retain traceable artifacts. This project does not replace Codex with Grok; it lets each system do the part it handles best.
 
-> 当前为发布候选版本。项目非官方，与 xAI、X、Reddit 或 OpenAI 均无隶属关系。
+> This is currently a release candidate. It is an unofficial project and is not affiliated with xAI, X, Reddit, or OpenAI.
 
-## 它能做什么
+## What it can do
 
-- 搜索指定 X 账号的最新公开帖子、相关讨论、引用和回复。
-- 调研 Reddit 最近出现的讨论、用户反馈、抱怨和产品口碑。
-- 用 Grok 的搜索结果补强 Codex 的普通网页调研，并与其他来源交叉比对。
-- 对带有时间范围的 Reddit 任务做本地日期验证，避免把窗口外的旧帖子误写成“最近 7 天”。
-- 保留原始结果和来源链接，方便当前任务或后续任务继续追问。
-- 在仓库之外的独立非 Git 目录中运行 Grok，避免把当前代码仓库作为 CLI 的工作目录暴露。
-- 日期无法确认时明确标记“日期未验证”，不伪造确定性，也不会仅因无法验证就静默丢弃结果。
+- Find the latest public posts, related discussions, quotes, and replies for a specific X account.
+- Research recent Reddit discussions, user feedback, complaints, and product sentiment.
+- Strengthen ordinary Codex web research with Grok search results and cross-check them against other sources.
+- Verify dates locally for time-bounded Reddit tasks, so an old post is not mislabeled as being from the “last 7 days.”
+- Retain original results and source links for follow-up questions in the current or a later task.
+- Run Grok from a dedicated non-Git directory outside your repository instead of exposing the current codebase as the CLI working directory.
+- Label dates as `date unverified` when they cannot be confirmed, without inventing certainty or silently discarding otherwise useful evidence.
 
-例如，你可以直接对 Codex 说：
+For example, you can simply ask Codex:
 
 ```text
-找一下 @openai 最近 10 条 X 帖子，按时间倒序整理并附原帖链接。
+Find the latest 10 posts from @openai on X, sort them newest first, and include direct links.
 
-看看最近 7 天 Reddit 上对 OpenAI 有哪些集中吐槽，按问题类型归纳。
+What have people complained about on Reddit regarding OpenAI over the last 7 days? Group the complaints by issue type.
 
-调研这个产品最近的社区反馈，X、Reddit 和公开网页互相交叉验证。
+Research recent community feedback about this product and cross-check X, Reddit, and public-web sources.
 ```
 
-安装后，涉及 X、Reddit、社区舆情、近期公开帖子或数据抓取的调研任务应自动触发本 Skill；普通网页调研也可以把它作为补充搜索源。你通常不需要直接运行脚本。
+After installation, research involving X, Reddit, community sentiment, recent public posts, or platform data collection should trigger this Skill automatically. Ordinary web research can also use it as a supplemental search source. You normally do not need to run its scripts yourself.
 
-## 为什么是 Grok
+## Why Grok
 
-因为 Grok 不是“另一个通用网页搜索模型”。它拥有 xAI 提供的服务端原生 X Search，这是它在这套组合里最难被替代的能力。
+Grok is not merely another general-purpose web-search model. It has xAI's server-side native X Search, which is the hardest capability to replace in this combination.
 
-xAI 的官方文档明确说明，`x_search` 可以在 X 上执行关键词搜索、语义搜索、用户搜索和完整 thread 获取，并访问实时社交内容；它还支持指定账号、排除账号、日期范围，以及帖子图片和视频理解。相比让 Codex 用普通网页搜索去碰运气，Grok 更接近 X 平台内部的原生检索层。参见 [xAI X Search 文档](https://docs.x.ai/developers/tools/x-search)。
+According to xAI's official documentation, `x_search` supports keyword search, semantic search, user search, complete thread retrieval, and access to real-time social content on X. It can include or exclude specific accounts, restrict date ranges, and understand images and videos attached to posts. Compared with asking Codex to discover X posts through ordinary web search, Grok is much closer to X's native retrieval layer. See the [xAI X Search documentation](https://docs.x.ai/developers/tools/x-search).
 
-对于 Reddit 和普通网页，Grok 的 `web_search` 同样由 xAI 在服务端执行，能够实时搜索网页、打开页面、提取相关内容并返回来源链接。Codex 再负责核对关键链接、校验时间和组织答案。参见 [xAI Web Search 文档](https://docs.x.ai/developers/tools/web-search)和[xAI 服务端工具说明](https://docs.x.ai/developers/tools/overview)。
+For Reddit and the public web, Grok's `web_search` is also executed by xAI's server-side tools. It can search live webpages, open pages, extract relevant content, and return source links. Codex then checks the important links, validates dates, and organizes the final answer. See the [xAI Web Search documentation](https://docs.x.ai/developers/tools/web-search) and [server-side tools overview](https://docs.x.ai/developers/tools/overview).
 
-### 和 X API、直接抓取相比
+### Compared with the X API and direct scraping
 
-截至 2026 年 7 月 15 日，X 官方 API 采用预购 credits 的按量计费模式：读取一条帖子收费 `$0.005`，读取一个用户对象收费 `$0.010`。按当前单价，读取 1,000 条帖子约为 `$5`，还需要开发者账号、Project、App、认证凭据、分页、限流和计费管理。价格可能调整，应以 [X API 官方价格页](https://docs.x.com/x-api/getting-started/pricing)为准。
+As of July 15, 2026, the official X API uses prepaid credits with usage-based pricing: reading one post costs `$0.005`, while reading one user object costs `$0.010`. At those published rates, reading 1,000 posts costs about `$5`, in addition to the developer account, Project, App, credentials, pagination, rate-limit handling, and billing management required for an integration. Prices may change; check the [official X API pricing page](https://docs.x.com/x-api/getting-started/pricing).
 
-而 Grok 当前有一条更适合个人调研的成本路径：xAI 的 Free 方案为 `$0/月`，官方描述是在“较宽松的额度”内提供实时 Web 与 X Search；xAI 还在 Grok 4.5 发布公告中注明，Grok Build 的 Grok 4.5 目前可以限时免费使用。与此同时，X 官方说明 Premium 会员拥有更高的 Grok 使用额度，Premium+ 的额度更高。参见 [xAI Grok 方案](https://x.ai/pricing)、[Grok 4.5 公告](https://x.ai/news/grok-4-5)和 [X Premium 权益说明](https://help.x.com/en/using-x/x-premium)。
+Grok currently offers a more practical cost path for individual research. xAI lists a Free plan at `$0/month` with real-time Web and X Search under a “generous usage” allowance. xAI's Grok 4.5 announcement also states that Grok 4.5 in Grok Build is free for a limited time. X says Premium accounts receive higher Grok usage limits, with still higher limits for Premium+. See [xAI Grok plans](https://x.ai/pricing), the [Grok 4.5 announcement](https://x.ai/news/grok-4-5), and [X Premium benefits](https://help.x.com/en/using-x/x-premium).
 
-这正是 `codex-grok-search` 的实际价值：把用户已经拥有的免费额度、Grok 订阅额度或 X Premium 附带的 Grok 权益，转化为 Codex 可自动调用的搜索与调研能力，而不必为了偶发的 X 调研再单独购买 X API credits、维护开发者 App 和实现一套搜索管道。
+That is the practical value of `codex-grok-search`: it turns the user's existing free allowance, Grok subscription, or eligible X Premium benefits into a search and research capability Codex can call automatically—without requiring occasional X research to justify separate X API credits, a developer App, and a custom search pipeline.
 
-免费政策、具体次数和不同产品间的账号权益可能随地区、活动与套餐调整；尤其是 X Premium 的 Grok 权益能否完整用于 Grok Build，应以用户登录后显示的当前模型权限和使用上限为准。本项目不会把阶段性免费额度宣传成永久承诺。
+Free offers, exact usage limits, and account entitlements can vary by region, promotion, and subscription. In particular, whether X Premium Grok benefits fully apply to Grok Build should be confirmed from the models and limits shown for the user's current login. This project does not present a temporary free allowance as a permanent guarantee.
 
-| 路线 | 成本与接入 | 搜索能力 | 账号与风控暴露 |
+| Route | Cost and setup | Search capability | Account and enforcement exposure |
 | --- | --- | --- | --- |
-| X 官方 API | 按资源付费并预购 credits；需要开发者项目、App 和凭据 | 官方结构化数据，适合稳定产品集成和大规模管道 | 合规路径，但需要自行处理额度、限流、账单和应用权限 |
-| 浏览器自动化或直接抓取 | 看起来没有 API 账单，但维护代理、Cookie、验证码和反爬绕过都有隐性成本 | 容易受登录墙、页面变化、限流和搜索可见性影响 | 用户账号、Cookie 和出口 IP 直接暴露给平台风控 |
-| `codex-grok-search` | 可利用 Grok Free、现有 Grok 订阅或符合条件的 X Premium 权益；不要求另购 X API credits 或配置 X Developer App | Grok 原生 X Search + Web Search，Codex 负责交叉验证和最终回答 | 主要搜索由 xAI 服务端执行，不自动操作用户的 X/Reddit 账号或浏览器 |
+| Official X API | Prepaid, per-resource credits; requires a developer Project, App, and credentials | Official structured data, suitable for stable integrations and large pipelines | Compliant path, but you manage quotas, rate limits, billing, and app permissions |
+| Browser automation or direct scraping | No obvious API bill, but proxies, cookies, CAPTCHAs, and anti-bot maintenance add hidden cost | Vulnerable to login walls, page changes, rate limits, and limited search visibility | User accounts, cookies, and egress IPs are directly exposed to platform enforcement |
+| `codex-grok-search` | Can use Grok Free, an existing Grok subscription, or eligible X Premium benefits; no separate X API credits or X Developer App required | Grok native X Search + Web Search, with Codex handling cross-checks and the final answer | Core discovery runs through xAI's server-side tools; it does not automate the user's X/Reddit account or browser |
 
-本 Skill 的目标不是替代需要稳定 SLA、完整数据授权或大规模结构化采集的官方 API。它更适合个人和小团队的临时调研：查最新帖子、跟踪社区讨论、验证账号动态、了解产品口碑，或者为 Codex 增加一个独立的实时搜索源。
+This Skill is not a replacement for an official API when you need a stable SLA, comprehensive data rights, or large-scale structured collection. It is designed for ad hoc research by individuals and small teams: checking recent posts, tracking community discussion, validating account activity, understanding product sentiment, or giving Codex an independent real-time search source.
 
-### 降低直接抓取带来的封禁风险
+### Reducing ban risk from direct scraping
 
-X 的服务条款明确禁止未经书面许可的 crawling 或 scraping；Reddit 也禁止未经许可的自动化数据收集，并对 API、商业使用和研究访问设置了单独规则。直接使用浏览器 Cookie、登录账号或固定出口 IP 高频抓取，既不稳定，也可能触发限流、验证码、IP 阻断或账号处置。参见 [X 服务条款](https://x.com/en/tos)、[Reddit 用户协议](https://redditinc.com/policies/user-agreement)和[Reddit 数据访问说明](https://support.reddithelp.com/hc/en-us/articles/14945211791892-Developer-Platform-Accessing-Reddit-Data)。
+X's Terms prohibit crawling or scraping without prior written consent. Reddit also restricts unauthorized automated collection and maintains separate rules for API access, commercial use, and research. High-frequency scraping through browser cookies, logged-in accounts, or a fixed egress IP is brittle and may trigger rate limits, CAPTCHAs, IP blocks, or account action. See the [X Terms of Service](https://x.com/en/tos), [Reddit User Agreement](https://redditinc.com/policies/user-agreement), and [Reddit data-access guidance](https://support.reddithelp.com/hc/en-us/articles/14945211791892-Developer-Platform-Accessing-Reddit-Data).
 
-`codex-grok-search` 不接管你的 X 或 Reddit 登录，不读取浏览器 Cookie，也不在本机运行平台页面自动化。X 搜索和主要网页发现由 xAI 的服务端工具执行；Reddit 结果只会在本地对有限数量的公开原帖页面做日期复核。这可以显著减少由用户机器直接发起的抓取量，以及账号、Cookie 和本机 IP 暴露给自动化风控的机会。
+`codex-grok-search` does not take over your X or Reddit login, read browser cookies, or run browser automation against those platforms. X search and most webpage discovery are performed by xAI's server-side tools. For Reddit, the local wrapper only opens a limited number of public submission pages to verify dates. This substantially reduces direct scraping from the user's machine and limits exposure of the user's account, cookies, and local IP to automated-enforcement systems.
 
-但它不是“防封保证”：平台政策、Grok 可用性、公开内容可见范围和服务端限额仍可能变化；少量 Reddit 日期验证请求也可能遇到 403 或限流。遇到限制时，Skill 会保留结果并标记日期未验证，而不是绕过平台限制或伪装成功。
+This is not a “no-ban guarantee.” Platform policy, Grok availability, public-content visibility, and server-side limits may change. The small number of Reddit date-verification requests may still encounter 403 responses or rate limits. When that happens, the Skill retains the finding and marks its date as unverified instead of bypassing the restriction or pretending verification succeeded.
 
-### 隐私隔离与安全边界
+### Privacy isolation and security boundaries
 
-2026 年 7 月，研究者对 Grok Build CLI `0.2.93` 的网络流量分析显示：它曾把完整的 Git 仓库包上传到 xAI 管理的存储，包括没有被任务读取的已跟踪文件和 Git 历史；关闭“Improve the model”也没有阻止该上传。xAI 后来在服务端禁用了这条上传路径，但这个变化不应被当作本项目的唯一安全边界。参见[原始线缆级分析](https://gist.github.com/cereblab/dc9a40bc26120f4540e4e09b75ffb547)和 [The Verge 的事件跟进](https://www.theverge.com/ai-artificial-intelligence/965600/spacexai-grok-build-repository-upload)。
+In July 2026, a network-level analysis of Grok Build CLI `0.2.93` found that it uploaded complete Git repository bundles to xAI-managed storage, including tracked files the task never read and full Git history. Disabling “Improve the model” did not stop that upload. xAI later disabled the upload path server-side, but that change should not be the only security boundary this project relies on. See the [original wire-level analysis](https://gist.github.com/cereblab/dc9a40bc26120f4540e4e09b75ffb547) and [The Verge's follow-up coverage](https://www.theverge.com/ai-artificial-intelligence/965600/spacexai-grok-build-repository-upload).
 
-`codex-grok-search` 不在用户当前项目或 Git 仓库中启动 Grok。它先在仓库之外创建仅当前用户可访问的独立研究目录，只写入本次搜索 prompt 和结果文件，再把该目录设为 Grok 的 `--cwd`。真实代码仓库不会被复制、挂载或传入这个运行环境。同时，每次运行使用临时的 `HOME`、`GROK_HOME` 和 `TMPDIR`，只复制必要的本机 Grok 登录文件，并在正式搜索前用 `grok inspect --json` 检查是否加载了项目指令、插件、MCP、非内置 Skill 或其他未审计执行面；只要结构不匹配就会在搜索前停止。
+`codex-grok-search` does not launch Grok from the user's current project or Git repository. It first creates a private research directory outside any repository, writes only the current search prompt and result artifacts there, and passes that directory as Grok's `--cwd`. The real codebase is not copied, mounted, or passed into the runtime. Each invocation also uses temporary `HOME`, `GROK_HOME`, and `TMPDIR` directories, copying only the local Grok authentication file required for the session. Before formal research, `grok inspect --json` verifies that no project instructions, plugins, MCP servers, non-bundled Skills, or other unaudited execution surfaces have been loaded. Any schema mismatch stops the run before research begins.
 
-这个保护不依赖 Grok 的“不上传仓库”承诺：即使 CLI 再次尝试打包整个工作目录，它面对的也只是本次临时研究目录，而不是用户的代码仓库。
+This protection does not depend on Grok promising not to upload repositories. Even if the CLI tries to package its entire working directory again, it sees the temporary research directory—not the user's code repository.
 
-正式研究还有以下固定边界：
+Formal research has additional fixed boundaries:
 
-- 版本检查、登录检查和搜索只使用经验证的官方 Grok 可执行文件，不信任任意 `PATH` 注入或自定义二进制。
-- X 或多来源任务只开放 `x_search`、`web_search` 和 `web_fetch`；Reddit/网页任务不开放 `x_search`。
-- 不向模型开放 MCP、本地文件读取、Shell、文件编辑、记忆或子代理。
-- Grok 输出必须通过封闭 JSON 结构校验；超时、非零退出、字段缺失或不完整结果都不会被伪装成成功。
-- 来自网页、X 或 Reddit 的文本始终被视为不可信数据，其中出现的指令、路径或授权声明不会被执行。
+- Version, authentication, and search checks use a verified official Grok executable instead of trusting arbitrary `PATH` injection or a custom binary.
+- X and multi-source tasks expose only `x_search`, `web_search`, and `web_fetch`; Reddit and web-only tasks do not expose `x_search`.
+- The model is not given MCP, local-file reading, shell access, file editing, memory, or subagents.
+- Grok output must pass a closed JSON schema. Timeouts, non-zero exits, missing fields, and incomplete results are never presented as success.
+- Text from webpages, X, or Reddit is always treated as untrusted data. Instructions, paths, or authorization claims inside retrieved content are never executed.
 
-在 macOS 上，正式研究命令使用 Grok 的原生 strict sandbox，并在启动前降低进程创建权限；在 Linux 上，由子进程监管器回收和终止脱离的后代进程。
+On macOS, formal research runs inside Grok's native strict sandbox and reduces process-creation privileges before launch. On Linux, a subprocess supervisor reaps and terminates detached descendants.
 
-边界也需要说清：用户主动提供的查询内容、Grok 为搜索生成的结果以及它访问的公开网页仍会经过 xAI 服务；本项目不是本地模型，也不宣传“零数据上传”。它解决的是不必要的本地仓库暴露，而不是消除云端搜索本身的数据传输。
+The boundary is deliberately explicit: queries supplied by the user, Grok's search results, and the public webpages it visits still pass through xAI services. This is not a local model, and the project does not claim “zero data upload.” It prevents unnecessary exposure of the local repository; it does not remove the data transmission inherent in cloud search.
 
-这些措施降低了本地研究工具读取项目内容或执行来源中恶意指令的风险，但不能保证搜索结果本身正确。重要结论仍然需要回到原始来源验证。
+These controls reduce the risk that a local research tool reads project content or executes malicious instructions from a source. They do not guarantee that search results are correct. Important claims still need to be checked against primary sources.
 
-## 工作方式
-
-```text
-用户问题
-  → Codex 拆解研究任务
-  → 本地包装器检查 Grok 安装、登录和模型权限
-  → Grok 4.5 搜索 X / Reddit / 公开网页
-  → 本地结构与来源校验
-  → Reddit 日期二次验证
-  → 保存可追溯结果
-  → Codex 交叉核对并回答
-```
-
-所有研究任务固定使用 `grok-4.5`，不提供模型覆盖参数，也不会在模型不可用时静默降级。
-
-## 使用条件
-
-- macOS 或 Linux，使用非 root 账号运行。
-- Python 3.9 或更高版本。
-- 通过 [xAI 官方安装器](https://x.ai/cli) 安装的 Grok Build CLI `0.2.101`。其他版本须先审查 inspect schema 和执行面，再更新本 Skill 的兼容范围。
-- 已在本机执行 `grok login` 并保持登录。
-- 支持 Skills 的 Codex 环境。
-
-本 Skill 使用本机现有的 Grok 登录状态，不需要 xAI API Key，也不会要求你把账号凭据粘贴给 Codex。运行时会主动移除 `XAI_API_KEY`，避免意外走 API 计费。
-
-如果环境不满足要求，它会明确停止并给出下一步：
-
-- 未安装官方 Grok Build：提示前往 `https://x.ai/cli` 安装。
-- Grok 未登录或登录已失效：返回 `grok_not_authenticated`，提示你在自己的终端运行 `grok login`。
-- 当前账号无法使用 Grok 4.5：明确报错，不切换到其他模型。
-
-## 安装
-
-### 推荐：把链接交给 Codex
-
-项目发布到 GitHub 后，复制仓库中 `codex-grok-search/` 目录的链接，新建一个 Codex 任务并发送：
+## How it works
 
 ```text
-请安装这个 Skill：<GitHub 上 codex-grok-search 目录的链接>
+User question
+  → Codex frames the research task
+  → Local wrapper checks Grok installation, login, and model access
+  → Grok 4.5 searches X / Reddit / the public web
+  → Local schema and source validation
+  → Secondary Reddit date verification
+  → Traceable artifacts are retained
+  → Codex cross-checks and answers
 ```
 
-Codex 会使用内置 Skill 安装器把它安装到你的 Skills 目录。安装完成后再新建一个任务，即可自动触发。
+Every research task is pinned to `grok-4.5`. There is no model override, and the Skill never silently falls back when the required model is unavailable.
 
-> 当前尚未创建 GitHub 公开仓库，因此暂不伪造安装 URL；发布时会把上面的占位内容换成可直接复制的真实链接。
+## Requirements
+
+- macOS or Linux, running as a non-root user.
+- Python 3.9 or newer.
+- Grok Build CLI `0.2.101`, installed through the [official xAI installer](https://x.ai/cli). Other versions must have their inspect schema and execution surfaces reviewed before this Skill's compatibility range is updated.
+- An active local Grok login created with `grok login`.
+- A Codex environment that supports Skills.
+
+The Skill uses the existing local Grok login. It does not require an xAI API key and never asks you to paste account credentials into Codex. It actively removes `XAI_API_KEY` from the runtime environment to avoid accidentally switching to API billing.
+
+If a requirement is missing, it stops and gives a specific next step:
+
+- Official Grok Build is missing: install it from `https://x.ai/cli`.
+- Grok is logged out or the login has expired: it returns `grok_not_authenticated` and asks you to run `grok login` in your own terminal.
+- Grok 4.5 is unavailable for the current account: it reports the error and does not switch models.
+
+## Installation
+
+### Recommended: install with Codex
+
+Start a new Codex task and send:
+
+```text
+Please install this Skill: https://github.com/sudoHG/codex-grok-search/tree/main/codex-grok-search
+```
+
+Codex will use its built-in Skill installer to place it in your Skills directory. Start another task after installation so Codex can load and trigger it.
 
 <details>
-<summary>高级：手动安装、升级或校验发布包</summary>
+<summary>Advanced: manual installation, upgrades, and Release verification</summary>
 
-### 从源码仓库安装
+### Install from a source checkout
 
-下面的命令必须在 Git clone 的仓库根目录运行。它从当前已检出的精确提交导出 Skill，先完成结构校验，再以同文件系统重命名的方式替换旧版本；升级时不会残留已经从新版本删除的旧文件。
+Run the following command from the root of a Git clone. It exports the Skill from the exact checked-out commit, validates the staged directory, and replaces the previous installation through same-filesystem renames. Upgrades do not leave files that were removed from the new version.
 
 <details>
-<summary>展开安装命令</summary>
+<summary>Show source installation command</summary>
 
 <!-- BEGIN STAGED INSTALL -->
 ```sh
@@ -206,19 +204,19 @@ trap - HUP INT TERM
 
 </details>
 
-安装完成后，重启 Codex 或新建一个任务，让 Codex 重新加载 Skills。
+Restart Codex or start a new task after installation so Skills are reloaded.
 
-### 从 Release 安装
+### Install from a Release
 
-从 GitHub Release 页面下载下列两个必需的 `v0.1.0-rc.2` 资产，并放在同一个目录：
+Download these two required `v0.1.0-rc.2` assets from the GitHub Release page into the same directory:
 
 - `codex-grok-search-v0.1.0-rc.2.zip`
 - `SHA256SUMS`
 
-`codex-grok-search-v0.1.0-rc.2.tar.gz` 是可选的内容相同备用格式。下面的命令只校验并安装你选择的 ZIP，不要求同时下载 tar.gz；随后验证 Skill 结构并完整替换旧版本。任何校验或切换失败都会保留或恢复原安装，不会把新旧文件合并。
+`codex-grok-search-v0.1.0-rc.2.tar.gz` is an optional equivalent archive. The command below validates only the selected ZIP, so the tarball is not required. It then validates the Skill structure and fully replaces the old installation. Any checksum, validation, or activation failure preserves or restores the previous installation instead of merging old and new files.
 
 <details>
-<summary>展开 Release 安装命令</summary>
+<summary>Show Release installation command</summary>
 
 <!-- BEGIN RELEASE INSTALL -->
 ```sh
@@ -295,49 +293,49 @@ trap - HUP INT TERM
 
 </details>
 
-当前仓库尚未发布到 GitHub，因此这里不伪造 Release URL；发布后 README 中的版本号和 Release 页面会一起锁定。安装完成后，重启 Codex 或新建一个任务。
+Download links will be added when the first GitHub release is published. Restart Codex or start a new task after installation.
 
 </details>
 
-## 直接使用命令行
+## Direct CLI use
 
-通常应让 Codex 自动调用。排查问题或查看历史结果时，也可以直接运行：
+Normally, let Codex invoke the Skill automatically. For diagnostics or retained-result inspection, you can also run:
 
 ```sh
 python3 codex-grok-search/scripts/run_search.py run \
   --platform x \
   --since 7d \
-  "最近一周人们如何评价这个产品发布？"
+  "How have people evaluated this product launch over the last week?"
 
 python3 codex-grok-search/scripts/run_search.py list
 python3 codex-grok-search/scripts/run_search.py show RUN_ID
 python3 codex-grok-search/scripts/run_search.py cleanup
 ```
 
-`run` 支持的主要平台模式是 `x`、`reddit`、`web` 和多来源调研。最终回答仍应由 Codex 打开关键原始链接、区分事实与推断，并对重要结论做交叉验证。
+The main platform modes for `run` are `x`, `reddit`, `web`, and multi-source research. Codex should still open important primary links, separate fact from inference, and cross-check consequential claims before writing the final answer.
 
-## 结果保存与清理
+## Result retention and cleanup
 
-每次运行会在以下目录保存私有结果：
+Each run stores private artifacts under:
 
 ```text
 ~/.cache/codex-grok-search/runs/
 ```
 
-默认策略：
+Default policy:
 
-- 未固定的运行结果保留 7 天。
-- 最多保留 20 次运行。
-- 清理发生在下一次调用开始时，不会在刚回答完问题后立刻删除。
-- 正在使用或已经固定的运行不会被静默删除。
-- 如果 20 个位置全部被固定或占用，新任务会返回 `cache_capacity_exhausted`，而不是破坏旧数据。
-- 卸载 Skill 默认保留缓存，便于后续追问或人工检查。
+- Unpinned runs are retained for 7 days.
+- At most 20 runs are retained.
+- Cleanup happens at the start of a later invocation, never immediately after an answer is returned.
+- Active and pinned runs are never silently deleted.
+- If all 20 slots are pinned or active, a new task returns `cache_capacity_exhausted` instead of damaging existing data.
+- Uninstalling the Skill preserves the cache by default, so later questions and manual inspection remain possible.
 
-查询和搜索结果可能暴露你的研究兴趣，缓存目录仅供本机当前用户访问。不要把秘密、密码或私有凭据作为搜索内容。
+Queries and search results may reveal your research interests. The cache is private to the current local user. Do not use secrets, passwords, or private credentials as search queries.
 
-## 卸载
+## Uninstall
 
-只移除 Skill，不删除研究缓存：
+Remove the Skill while preserving retained research:
 
 <!-- BEGIN UNINSTALL -->
 ```sh
@@ -378,30 +376,30 @@ trap - HUP INT TERM
 ```
 <!-- END UNINSTALL -->
 
-确认不再需要历史结果后，才手动删除缓存：
+Delete the cache manually only when you no longer need historical results:
 
 ```sh
 rm -rf "$HOME/.cache/codex-grok-search"
 ```
 
-## 日期与来源规则
+## Date and source rules
 
-- Reddit 日期由本地验证器单独核对，而不是只相信模型生成的日期。
-- 最多主动抓取并验证 20 个 Reddit URL；超出上限的候选仍会保留，并标记 `verification_limit_exceeded`。
-- 无法确认绝对日期的结果标记为“日期未验证”，不能用来支撑严格的时间窗口结论。
-- 所有来源链接都必须是允许的平台 URL；无效 URL、控制字符、未知字段或会话不匹配会导致结果被拒绝。
-- 搜索覆盖是尽力而为，不承诺穷尽平台上的全部内容。
+- Reddit dates are checked by a separate local verifier rather than accepted from model output alone.
+- At most 20 Reddit URLs are actively fetched for verification. Additional candidates are retained and marked `verification_limit_exceeded`.
+- A result whose absolute date cannot be confirmed is labeled `date unverified` and cannot support a strict time-window claim.
+- Every source link must match an allowed platform URL. Invalid URLs, control characters, unknown fields, or session mismatches cause the result to be rejected.
+- Search coverage is best-effort and is not guaranteed to exhaust all matching platform content.
 
-## 开发验证
+## Development validation
 
 ```sh
 python3 -m unittest discover -s tests -v
 python3 "${CODEX_HOME:-$HOME/.codex}/skills/.system/skill-creator/scripts/quick_validate.py" codex-grok-search
 ```
 
-## 可复现发布构建
+## Reproducible Release builds
 
-仓库提交 `scripts/build_release.py` 是 Release 资产的唯一构建入口。它直接读取指定 Git commit 的 `codex-grok-search/` tree，拒绝符号链接和特殊文件，并用固定元数据生成 ZIP、tar.gz 与 `SHA256SUMS`；不读取工作树中的未跟踪文件，也不继承调用者的 Git `tar.umask`。目录和 Git executable 文件固定为 `0755`，其他普通文件固定为 `0644`。
+The tracked `scripts/build_release.py` is the only Release-asset build entrypoint. It reads the `codex-grok-search/` tree directly from a specified Git commit, rejects symlinks and special files, and generates ZIP, tar.gz, and `SHA256SUMS` with fixed metadata. It never reads untracked working-tree files or inherits the caller's Git `tar.umask`. Directories and Git executable files are normalized to `0755`; other regular files are normalized to `0644`.
 
 ```sh
 python3 scripts/build_release.py \
@@ -410,10 +408,10 @@ python3 scripts/build_release.py \
   --output-dir /tmp/codex-grok-search-v0.1.0-rc.2
 ```
 
-同一 Python 版本和同一 Git commit 的重复构建应得到字节级相同的三个资产。发布时应在 Release notes 中记录完整 commit SHA 和构建环境的 Python 版本。
+Repeated builds from the same Git commit and Python version should produce byte-identical copies of all three assets. Release notes should record the full commit SHA and the Python version used for the build.
 
-当前发布候选已经完成单元测试、结构校验，以及真实 X / Reddit canary。公开发布前仍会对最终导出物重新执行同一套验证。
+The current release candidate has passed unit tests, structure validation, and real X and Reddit canaries. The final exported artifacts will be subjected to the same checks again before public release.
 
-## 许可证
+## License
 
 [MIT](LICENSE)
