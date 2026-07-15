@@ -28,11 +28,11 @@ What have people complained about on Reddit regarding OpenAI over the last 7 day
 Research recent community feedback about this product and cross-check X, Reddit, and public-web sources.
 ```
 
-After installation, research involving X, Reddit, community sentiment, recent public posts, or platform data collection should trigger this Skill automatically. Ordinary web research can also use it as a supplemental search source. You normally do not need to run its scripts yourself.
+After installation, Codex can automatically trigger this Skill for research involving X, Reddit, community sentiment, recent public posts, or platform data collection. It can also serve as a second source for ordinary web research. You normally do not need to run its scripts yourself.
 
 ## Why Grok
 
-Grok is not merely another general-purpose web-search model. It has xAI's server-side native X Search, which is the hardest capability to replace in this combination.
+Grok's main advantage here is xAI's server-side native X Search—a capability that is difficult to reproduce with ordinary web search.
 
 According to xAI's official documentation, `x_search` supports keyword search, semantic search, user search, complete thread retrieval, and access to real-time social content on X. It can include or exclude specific accounts, restrict date ranges, and understand images and videos attached to posts. Compared with asking Codex to discover X posts through ordinary web search, Grok is much closer to X's native retrieval layer. See the [xAI X Search documentation](https://docs.x.ai/developers/tools/x-search).
 
@@ -40,11 +40,11 @@ For Reddit and the public web, Grok's `web_search` is also executed by xAI's ser
 
 ### Compared with the X API and direct scraping
 
-As of July 15, 2026, the official X API uses prepaid credits with usage-based pricing: reading one post costs `$0.005`, while reading one user object costs `$0.010`. At those published rates, reading 1,000 posts costs about `$5`, in addition to the developer account, Project, App, credentials, pagination, rate-limit handling, and billing management required for an integration. Prices may change; check the [official X API pricing page](https://docs.x.com/x-api/getting-started/pricing).
+As of July 16, 2026, the official X API uses prepaid credits with usage-based pricing: reading one post costs `$0.005`, while reading one user object costs `$0.010`. At those published rates, 1,000 post reads cost about `$5`. An integration also requires a developer account, Project, App, credentials, pagination, rate-limit handling, and billing management. Prices may change; check the [official X API pricing page](https://docs.x.com/x-api/getting-started/pricing).
 
-Grok currently offers a more practical cost path for individual research. xAI lists a Free plan at `$0/month` with real-time Web and X Search under a “generous usage” allowance. xAI's Grok 4.5 announcement also states that Grok 4.5 in Grok Build is free for a limited time. X says Premium accounts receive higher Grok usage limits, with still higher limits for Premium+. See [xAI Grok plans](https://x.ai/pricing), the [Grok 4.5 announcement](https://x.ai/news/grok-4-5), and [X Premium benefits](https://help.x.com/en/using-x/x-premium).
+For individual research, Grok may already be covered by an allowance or subscription you have. xAI lists a Free plan at `$0/month` with real-time Web and X Search under “generous limits,” and its Grok 4.5 announcement says Grok Build usage is free for a limited time. X says Premium accounts receive increased Grok usage limits, with higher limits for Premium+. See [xAI Grok plans](https://x.ai/pricing), the [Grok 4.5 announcement](https://x.ai/news/grok-4-5), and [X Premium benefits](https://help.x.com/en/using-x/x-premium).
 
-That is the practical value of `codex-grok-search`: it turns the user's existing free allowance, Grok subscription, or eligible X Premium benefits into a search and research capability Codex can call automatically—without requiring occasional X research to justify separate X API credits, a developer App, and a custom search pipeline.
+`codex-grok-search` lets Codex use that existing allowance or subscription for research, without requiring separate X API credits, a developer App, and a custom search pipeline for occasional X searches.
 
 Free offers, exact usage limits, and account entitlements can vary by region, promotion, and subscription. In particular, whether X Premium Grok benefits fully apply to Grok Build should be confirmed from the models and limits shown for the user's current login. This project does not present a temporary free allowance as a permanent guarantee.
 
@@ -66,21 +66,21 @@ This is not a “no-ban guarantee.” Platform policy, Grok availability, public
 
 ### Privacy isolation and security boundaries
 
-In July 2026, a network-level analysis of Grok Build CLI `0.2.93` found that it uploaded complete Git repository bundles to xAI-managed storage, including tracked files the task never read and full Git history. Disabling “Improve the model” did not stop that upload. xAI later disabled the upload path server-side, but that change should not be the only security boundary this project relies on. See the [original wire-level analysis](https://gist.github.com/cereblab/dc9a40bc26120f4540e4e09b75ffb547) and [The Verge's follow-up coverage](https://www.theverge.com/ai-artificial-intelligence/965600/spacexai-grok-build-repository-upload).
+In July 2026, an independent network-level analysis reported that Grok Build CLI `0.2.93` uploaded complete Git repository bundles to xAI-managed storage, including tracked files the task never read and full Git history. The analysis also reported that disabling “Improve the model” did not stop the upload. xAI later disabled the upload path server-side, but this project does not rely on that server-side change as its only security boundary. See the [original wire-level analysis](https://gist.github.com/cereblab/dc9a40bc26120f4540e4e09b75ffb547) and [The Verge's follow-up coverage](https://www.theverge.com/ai-artificial-intelligence/965600/spacexai-grok-build-repository-upload).
 
-`codex-grok-search` does not launch Grok from the user's current project or Git repository. It first creates a private research directory outside any repository, writes only the current search prompt and result artifacts there, and passes that directory as Grok's `--cwd`. The real codebase is not copied, mounted, or passed into the runtime. Each invocation also uses temporary `HOME`, `GROK_HOME`, and `TMPDIR` directories, copying only the local Grok authentication file required for the session. Before formal research, `grok inspect --json` verifies that no project instructions, plugins, MCP servers, non-bundled Skills, or other unaudited execution surfaces have been loaded. Any schema mismatch stops the run before research begins.
+`codex-grok-search` does not launch Grok from the user's current project or Git repository. It first creates a private research directory outside any repository, writes only the current search prompt and result artifacts there, and passes that directory as Grok's `--cwd`. The real codebase is not copied, mounted, or passed into the runtime. Each invocation also uses temporary `HOME`, `GROK_HOME`, and `TMPDIR` directories, copying only the local Grok authentication file required for the session. Before a search begins, `grok inspect --json` verifies that no project instructions, plugins, MCP servers, non-bundled Skills, or other unaudited execution surfaces have been loaded. Any schema mismatch stops the run.
 
 This protection does not depend on Grok promising not to upload repositories. Even if the CLI tries to package its entire working directory again, it sees the temporary research directory—not the user's code repository.
 
-Formal research has additional fixed boundaries:
+Each research run has additional fixed boundaries:
 
 - Version, authentication, and search checks use a verified official Grok executable instead of trusting arbitrary `PATH` injection or a custom binary.
 - X and multi-source tasks expose only `x_search`, `web_search`, and `web_fetch`; Reddit and web-only tasks do not expose `x_search`.
 - The model is not given MCP, local-file reading, shell access, file editing, memory, or subagents.
-- Grok output must pass a closed JSON schema. Timeouts, non-zero exits, missing fields, and incomplete results are never presented as success.
+- Grok output must pass a strict JSON schema. Timeouts, non-zero exits, missing fields, and incomplete results are never presented as success.
 - Text from webpages, X, or Reddit is always treated as untrusted data. Instructions, paths, or authorization claims inside retrieved content are never executed.
 
-On macOS, formal research runs inside Grok's native strict sandbox and reduces process-creation privileges before launch. On Linux, a subprocess supervisor reaps and terminates detached descendants.
+On macOS, research runs inside Grok's native strict sandbox and reduces process-creation privileges before launch. On Linux, a subprocess supervisor reaps and terminates detached descendants.
 
 The boundary is deliberately explicit: queries supplied by the user, Grok's search results, and the public webpages it visits still pass through xAI services. This is not a local model, and the project does not claim “zero data upload.” It prevents unnecessary exposure of the local repository; it does not remove the data transmission inherent in cloud search.
 
@@ -293,7 +293,7 @@ trap - HUP INT TERM
 
 </details>
 
-Download links will be added when the first GitHub release is published. Restart Codex or start a new task after installation.
+Download the assets from the [v0.1.0-rc.2 Release page](https://github.com/sudoHG/codex-grok-search/releases/tag/v0.1.0-rc.2). Restart Codex or start a new task after installation.
 
 </details>
 
@@ -410,7 +410,7 @@ python3 scripts/build_release.py \
 
 Repeated builds from the same Git commit and Python version should produce byte-identical copies of all three assets. Release notes should record the full commit SHA and the Python version used for the build.
 
-The current release candidate has passed unit tests, structure validation, and real X and Reddit canaries. The final exported artifacts will be subjected to the same checks again before public release.
+This release candidate has passed unit tests, structure validation, real X and Reddit canaries, and reproducible-asset checks. The GitHub Release assets are built from the tagged repository commit and verified again before the draft is published.
 
 ## License
 

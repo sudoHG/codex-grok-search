@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -p 'test_*.py'
+      - name: Compile Python sources
+        run: python -m py_compile codex-grok-search/scripts/*.py scripts/*.py tests/*.py
+      - name: Build release assets
+        run: |
+          python scripts/build_release.py \
+            --commit HEAD \
+            --version v0.1.0-rc.2 \
+            --output-dir "$RUNNER_TEMP/codex-grok-search-release"
+          cd "$RUNNER_TEMP/codex-grok-search-release"
+          sha256sum --check SHA256SUMS

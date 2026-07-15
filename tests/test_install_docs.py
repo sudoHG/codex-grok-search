@@ -18,6 +18,9 @@ UNINSTALL_END = "<!-- END UNINSTALL -->"
 INSTALL_URL = (
     "https://github.com/sudoHG/codex-grok-search/tree/main/codex-grok-search"
 )
+RELEASE_URL = (
+    "https://github.com/sudoHG/codex-grok-search/releases/tag/v0.1.0-rc.2"
+)
 
 
 def install_script() -> str:
@@ -61,7 +64,7 @@ class InstallDocumentationTests(unittest.TestCase):
                     marked_script(chinese, start, end),
                 )
 
-    def test_readmes_use_real_install_url_without_draft_placeholders(self):
+    def test_readmes_use_real_urls_without_draft_placeholders(self):
         readmes = [
             (ROOT / "README.md").read_text(encoding="utf-8"),
             (ROOT / "README.zh-CN.md").read_text(encoding="utf-8"),
@@ -72,11 +75,23 @@ class InstallDocumentationTests(unittest.TestCase):
             "占位内容",
             "placeholder above",
             "public GitHub repository does not exist yet",
+            "Download links will be added",
+            "首个 GitHub Release 发布后",
         )
         for readme in readmes:
             self.assertIn(INSTALL_URL, readme)
+            self.assertIn(RELEASE_URL, readme)
             for snippet in forbidden:
                 self.assertNotIn(snippet, readme)
+
+    def test_default_readme_is_english_and_links_to_chinese(self):
+        default = (ROOT / "README.md").read_text(encoding="utf-8")
+        chinese = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
+        self.assertIn("[简体中文](README.zh-CN.md) | English", default)
+        self.assertIn("[English](README.md) | 简体中文", chinese)
+        self.assertIn("## What it can do", default)
+        self.assertIn("## 它能做什么", chinese)
+        self.assertFalse((ROOT / "README.en.md").exists())
 
     def prepare(self, root: Path, validator_exit: int = 0):
         project = root / "project"
