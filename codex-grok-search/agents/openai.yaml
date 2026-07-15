@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codex + Grok Search"
+  short_description: "Grok-powered X, Reddit, and web research for Codex."
+  default_prompt: "Use $codex-grok-search to research a current topic across X, Reddit, and the web, then cross-check the findings."
