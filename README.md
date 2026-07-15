@@ -6,7 +6,7 @@ Let Codex call the Grok Build CLI already authenticated on your machine to add r
 
 Codex frames the task, designs the research, and synthesizes the answer. Grok discovers public content on X, Reddit, and the web. Local scripts validate the output, verify Reddit dates, and retain traceable artifacts. This project does not replace Codex with Grok; it lets each system do the part it handles best.
 
-> This is currently a release candidate. It is an unofficial project and is not affiliated with xAI, X, Reddit, or OpenAI.
+> Current stable release: `v0.1.0`. This is an unofficial project and is not affiliated with xAI, X, Reddit, or OpenAI.
 
 ## What it can do
 
@@ -208,12 +208,12 @@ Restart Codex or start a new task after installation so Skills are reloaded.
 
 ### Install from a Release
 
-Download these two required `v0.1.0-rc.2` assets from the GitHub Release page into the same directory:
+Download these two required `v0.1.0` assets from the GitHub Release page into the same directory:
 
-- `codex-grok-search-v0.1.0-rc.2.zip`
+- `codex-grok-search-v0.1.0.zip`
 - `SHA256SUMS`
 
-`codex-grok-search-v0.1.0-rc.2.tar.gz` is an optional equivalent archive. The command below validates only the selected ZIP, so the tarball is not required. It then validates the Skill structure and fully replaces the old installation. Any checksum, validation, or activation failure preserves or restores the previous installation instead of merging old and new files.
+`codex-grok-search-v0.1.0.tar.gz` is an optional equivalent archive. The command below validates only the selected ZIP, so the tarball is not required. It then validates the Skill structure and fully replaces the old installation. Any checksum, validation, or activation failure preserves or restores the previous installation instead of merging old and new files.
 
 <details>
 <summary>Show Release installation command</summary>
@@ -221,7 +221,7 @@ Download these two required `v0.1.0-rc.2` assets from the GitHub Release page in
 <!-- BEGIN RELEASE INSTALL -->
 ```sh
 set -eu
-version="v0.1.0-rc.2"
+version="v0.1.0"
 archive="codex-grok-search-${version}.zip"
 checksums="SHA256SUMS"
 skills_root="${CODEX_HOME:-$HOME/.codex}/skills"
@@ -293,7 +293,7 @@ trap - HUP INT TERM
 
 </details>
 
-Download the assets from the [v0.1.0-rc.2 Release page](https://github.com/sudoHG/codex-grok-search/releases/tag/v0.1.0-rc.2). Restart Codex or start a new task after installation.
+Download the assets from the [v0.1.0 Release page](https://github.com/sudoHG/codex-grok-search/releases/tag/v0.1.0). Restart Codex or start a new task after installation.
 
 </details>
 
@@ -404,13 +404,13 @@ The tracked `scripts/build_release.py` is the only Release-asset build entrypoin
 ```sh
 python3 scripts/build_release.py \
   --commit HEAD \
-  --version v0.1.0-rc.2 \
-  --output-dir /tmp/codex-grok-search-v0.1.0-rc.2
+  --version v0.1.0 \
+  --output-dir /tmp/codex-grok-search-v0.1.0
 ```
 
 Repeated builds from the same Git commit and Python version should produce byte-identical copies of all three assets. Release notes should record the full commit SHA and the Python version used for the build.
 
-This release candidate has passed unit tests, structure validation, real X and Reddit canaries, and reproducible-asset checks. The GitHub Release assets are built from the tagged repository commit and verified again before the draft is published.
+The stable release has passed unit tests, structure validation, real X and Reddit canaries, and reproducible-asset checks. GitHub Release assets are built from the tagged repository commit and verified again before publication.
 
 ## License
 

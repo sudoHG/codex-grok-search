@@ -58,7 +58,7 @@ class ReleaseBuildTests(unittest.TestCase):
                 "--commit",
                 "HEAD",
                 "--version",
-                "v0.1.0-rc.2",
+                "v0.1.0",
                 "--output-dir",
                 str(output),
             ],
@@ -80,8 +80,8 @@ class ReleaseBuildTests(unittest.TestCase):
             self.assertEqual(one.returncode, 0, one.stderr)
             self.assertEqual(two.returncode, 0, two.stderr)
             names = (
-                "codex-grok-search-v0.1.0-rc.2.zip",
-                "codex-grok-search-v0.1.0-rc.2.tar.gz",
+                "codex-grok-search-v0.1.0.zip",
+                "codex-grok-search-v0.1.0.tar.gz",
                 "SHA256SUMS",
             )
             for name in names:
