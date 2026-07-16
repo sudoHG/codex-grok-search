@@ -21,6 +21,14 @@ INSTALL_URL = (
 RELEASE_URL = (
     "https://github.com/sudoHG/codex-grok-search/releases/tag/v0.1.0"
 )
+BADGE_LABELS = (
+    "CI",
+    "Release",
+    "Downloads",
+    "Stars",
+    "License",
+    "README views",
+)
 
 
 def install_script() -> str:
@@ -92,6 +100,22 @@ class InstallDocumentationTests(unittest.TestCase):
         self.assertIn("## What it can do", default)
         self.assertIn("## 它能做什么", chinese)
         self.assertFalse((ROOT / "README.en.md").exists())
+
+    def test_readmes_share_the_same_complete_badge_row(self):
+        default_lines = (ROOT / "README.md").read_text(encoding="utf-8").splitlines()
+        chinese_lines = (
+            (ROOT / "README.zh-CN.md").read_text(encoding="utf-8").splitlines()
+        )
+        badge_row = default_lines[2]
+        self.assertEqual(badge_row, chinese_lines[2])
+        for label in BADGE_LABELS:
+            self.assertIn(f"[![{label}]", badge_row)
+        self.assertIn("img.shields.io/github/actions/workflow/status", badge_row)
+        self.assertIn("img.shields.io/github/v/release", badge_row)
+        self.assertIn("img.shields.io/github/downloads", badge_row)
+        self.assertIn("img.shields.io/github/stars", badge_row)
+        self.assertIn("img.shields.io/github/license", badge_row)
+        self.assertIn("hits.sh/github.com/sudoHG/codex-grok-search.svg", badge_row)
 
     def prepare(self, root: Path, validator_exit: int = 0):
         project = root / "project"

@@ -1,5 +1,7 @@
 # codex-grok-search
 
+[![CI](https://img.shields.io/github/actions/workflow/status/sudoHG/codex-grok-search/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/sudoHG/codex-grok-search/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/sudoHG/codex-grok-search?style=flat-square&label=release)](https://github.com/sudoHG/codex-grok-search/releases/latest) [![Downloads](https://img.shields.io/github/downloads/sudoHG/codex-grok-search/total?style=flat-square&label=downloads)](https://github.com/sudoHG/codex-grok-search/releases) [![Stars](https://img.shields.io/github/stars/sudoHG/codex-grok-search?style=flat-square&label=stars)](https://github.com/sudoHG/codex-grok-search/stargazers) [![License](https://img.shields.io/github/license/sudoHG/codex-grok-search?style=flat-square)](LICENSE) [![README views](https://hits.sh/github.com/sudoHG/codex-grok-search.svg?style=flat-square&label=README%20views)](https://hits.sh/github.com/sudoHG/codex-grok-search/)
+
 [English](README.md) | 简体中文
 
 让 Codex 调用你本机已经登录的 Grok Build，为 X、Reddit 和公开网页调研补上实时社区搜索与交叉验证能力。

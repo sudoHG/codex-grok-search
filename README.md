@@ -1,5 +1,7 @@
 # codex-grok-search
 
+[![CI](https://img.shields.io/github/actions/workflow/status/sudoHG/codex-grok-search/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/sudoHG/codex-grok-search/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/sudoHG/codex-grok-search?style=flat-square&label=release)](https://github.com/sudoHG/codex-grok-search/releases/latest) [![Downloads](https://img.shields.io/github/downloads/sudoHG/codex-grok-search/total?style=flat-square&label=downloads)](https://github.com/sudoHG/codex-grok-search/releases) [![Stars](https://img.shields.io/github/stars/sudoHG/codex-grok-search?style=flat-square&label=stars)](https://github.com/sudoHG/codex-grok-search/stargazers) [![License](https://img.shields.io/github/license/sudoHG/codex-grok-search?style=flat-square)](LICENSE) [![README views](https://hits.sh/github.com/sudoHG/codex-grok-search.svg?style=flat-square&label=README%20views)](https://hits.sh/github.com/sudoHG/codex-grok-search/)
+
 [简体中文](README.zh-CN.md) | English
 
 Let Codex call the Grok Build CLI already authenticated on your machine to add real-time community search and cross-checking across X, Reddit, and the public web.
