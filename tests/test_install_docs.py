@@ -19,7 +19,7 @@ INSTALL_URL = (
     "https://github.com/sudoHG/codex-grok-search/tree/main/codex-grok-search"
 )
 RELEASE_URL = (
-    "https://github.com/sudoHG/codex-grok-search/releases/tag/v0.1.0"
+    "https://github.com/sudoHG/codex-grok-search/releases/tag/v0.1.1"
 )
 BADGE_LABELS = (
     "CI",
@@ -58,6 +58,17 @@ def marked_script(path: Path, start: str, end: str) -> str:
 
 
 class InstallDocumentationTests(unittest.TestCase):
+    def test_skill_metadata_explicitly_routes_current_x_and_reddit_first(self):
+        skill = (ROOT / "codex-grok-search" / "SKILL.md").read_text(encoding="utf-8")
+        frontmatter = skill.split("---", 2)[1]
+        description = frontmatter.split("description:", 1)[1].strip()
+        self.assertTrue(description.startswith("MUST use first for current X/Twitter"))
+        self.assertIn("an account's latest posts", frontmatter)
+        self.assertIn("recent discussions", frontmatter)
+        self.assertIn("without Codex web search or browser verification", frontmatter)
+        self.assertIn("Do not call Codex web search", skill)
+        self.assertIn("Never use the user's personal or interactive browser", skill)
+
     def test_chinese_manual_commands_match_default_english_readme(self):
         chinese = ROOT / "README.zh-CN.md"
         self.assertTrue(chinese.is_file())
@@ -177,7 +188,7 @@ class InstallDocumentationTests(unittest.TestCase):
         scripts = payload / "scripts"
         scripts.mkdir()
         (scripts / "run_search.py").write_text("print('release')\n", encoding="utf-8")
-        archive = assets / "codex-grok-search-v0.1.0.zip"
+        archive = assets / "codex-grok-search-v0.1.1.zip"
         assets.mkdir()
         with zipfile.ZipFile(archive, "w") as bundle:
             bundle.write(payload / "SKILL.md", "codex-grok-search/SKILL.md")
@@ -185,7 +196,7 @@ class InstallDocumentationTests(unittest.TestCase):
                 payload / "scripts/run_search.py",
                 "codex-grok-search/scripts/run_search.py",
             )
-        tarball = assets / "codex-grok-search-v0.1.0.tar.gz"
+        tarball = assets / "codex-grok-search-v0.1.1.tar.gz"
         tarball.write_bytes(b"matching-release-fixture")
         checksums = []
         for artifact in (archive, tarball):
@@ -338,7 +349,7 @@ class InstallDocumentationTests(unittest.TestCase):
     def test_release_install_verifies_and_replaces_without_stale_files(self):
         with tempfile.TemporaryDirectory() as tmp:
             assets, codex_home = self.prepare_release(Path(tmp))
-            (assets / "codex-grok-search-v0.1.0.tar.gz").unlink()
+            (assets / "codex-grok-search-v0.1.1.tar.gz").unlink()
             destination = codex_home / "skills" / "codex-grok-search"
             destination.mkdir(parents=True)
             (destination / "stale.txt").write_text("old\n", encoding="utf-8")
@@ -360,7 +371,7 @@ class InstallDocumentationTests(unittest.TestCase):
             destination = codex_home / "skills" / "codex-grok-search"
             destination.mkdir(parents=True)
             (destination / "old.txt").write_text("preserve\n", encoding="utf-8")
-            archive = assets / "codex-grok-search-v0.1.0.zip"
+            archive = assets / "codex-grok-search-v0.1.1.zip"
             archive.write_bytes(archive.read_bytes() + b"tampered")
             completed = self.run_release_install(assets, codex_home)
             self.assertNotEqual(completed.returncode, 0)

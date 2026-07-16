@@ -68,6 +68,7 @@ class RunSearchTests(unittest.TestCase):
         values = {
             "query": "example",
             "platform": "x",
+            "depth": "quick",
             "since": None,
             "until": None,
             "cache_dir": str(cache_root),
@@ -103,6 +104,43 @@ class RunSearchTests(unittest.TestCase):
         ):
             output = run_search.check_grok_auth("grok", 30, {}, Path(tmp))
         self.assertIn("logged in", output)
+
+    def test_auth_preflight_retries_after_token_refresh_takes_effect(self):
+        refreshed_but_stale = (
+            1,
+            "You are not authenticated.\nDefault model: grok-4.5\n",
+            "",
+            False,
+        )
+        authenticated = (
+            0,
+            "You are logged in with grok.com.\nAvailable models:\n* grok-4.5\n",
+            "",
+            False,
+        )
+        with tempfile.TemporaryDirectory() as tmp, patch(
+            "run_search._run_process",
+            side_effect=(refreshed_but_stale, authenticated),
+        ) as runner:
+            output = run_search.check_grok_auth("grok", 30, {}, Path(tmp))
+        self.assertIn("You are logged in", output)
+        self.assertEqual(runner.call_count, 2)
+
+    def test_auth_preflight_retries_generic_first_failure(self):
+        with tempfile.TemporaryDirectory() as tmp, patch(
+            "run_search._run_process",
+            side_effect=(
+                (1, "", "authentication refresh failed", False),
+                (
+                    0,
+                    "You are logged in with grok.com.\nAvailable models:\n* grok-4.5\n",
+                    "",
+                    False,
+                ),
+            ),
+        ):
+            output = run_search.check_grok_auth("grok", 30, {}, Path(tmp))
+        self.assertIn("You are logged in", output)
 
     def test_auth_preflight_distinguishes_logout_from_other_failure(self):
         logged_out = SimpleNamespace(
@@ -198,8 +236,9 @@ class RunSearchTests(unittest.TestCase):
             run_search.build_parser().parse_args(["run", "query", "--cache-dir", "/tmp/cache"])
 
     def test_tool_allowlist_is_platform_scoped(self):
+        self.assertEqual(run_search.tools_for_platform("x"), ("x_search",))
         self.assertEqual(
-            run_search.tools_for_platform("x"),
+            run_search.tools_for_platform("x", "deep"),
             ("x_search", "web_search", "web_fetch"),
         )
         self.assertEqual(
@@ -366,6 +405,20 @@ class RunSearchTests(unittest.TestCase):
         self.assertIn("additional fields are forbidden", prompt)
         self.assertIn("label its date as unverified", prompt)
         self.assertIn("Reddit", prompt)
+        self.assertIn("Optimize for a fast direct answer", prompt)
+        self.assertIn("Return at most 5 findings", prompt)
+        self.assertIn("no more than two search tool calls", prompt)
+        self.assertIn("Do not cross-check each finding", prompt)
+        self.assertIn("no URL appears in any prose field", prompt)
+        deep_prompt = run_search.build_prompt(
+            "Investigate recent complaints",
+            "reddit",
+            datetime(2026, 7, 9, tzinfo=timezone.utc),
+            datetime(2026, 7, 15, tzinfo=timezone.utc),
+            "deep",
+        )
+        self.assertIn("Perform deeper research", deep_prompt)
+        self.assertIn("cross-check material claims", deep_prompt)
 
     def test_cache_refuses_nonempty_unowned_root_and_symlink_root(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1287,6 +1340,35 @@ time.sleep(10)
                     self.assertFalse(Path(env["HOME"]).is_relative_to(caller_tmp))
                     self.assertTrue(Path(env["TMPDIR"]).is_relative_to(Path(env["HOME"])))
 
+    def test_persistent_auth_environment_refreshes_only_real_grok_home(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            real_home = Path(tmp) / "real-home"
+            grok_home = real_home / ".grok"
+            grok_home.mkdir(parents=True, mode=0o700)
+            auth = grok_home / "auth.json"
+            auth.write_text('{"token":"old"}', encoding="utf-8")
+            auth.chmod(0o600)
+            project = Path(tmp) / "project"
+            project.mkdir()
+            (project / ".git").mkdir()
+            with patch.dict(
+                os.environ,
+                {"XAI_API_KEY": "must-not-pass", "UNRELATED_SECRET": "must-not-pass"},
+                clear=False,
+            ):
+                with run_search.persistent_auth_grok_environment(real_home) as (env, cwd):
+                    self.assertEqual(env["GROK_HOME"], str(grok_home))
+                    self.assertNotEqual(env["HOME"], str(real_home))
+                    self.assertFalse(run_search._inside_git_worktree(cwd))
+                    self.assertNotIn("XAI_API_KEY", env)
+                    self.assertNotIn("UNRELATED_SECRET", env)
+                    self.assertEqual(env["GROK_CURSOR_SKILLS_ENABLED"], "false")
+                    self.assertEqual(env["GROK_CLAUDE_AGENTS_ENABLED"], "false")
+                    Path(env["GROK_HOME"], "auth.json").write_text(
+                        '{"token":"refreshed"}', encoding="utf-8"
+                    )
+            self.assertIn("refreshed", auth.read_text(encoding="utf-8"))
+
     def test_run_uses_sandbox_allowlist_fixed_session_and_validated_output(self):
         calls = []
 
@@ -1338,7 +1420,11 @@ time.sleep(10)
             self.assertEqual(command[command.index("--sandbox") + 1], run_search.SANDBOX_PROFILE)
             self.assertEqual(
                 command[command.index("--tools") + 1],
-                "x_search,web_search,web_fetch",
+                "x_search",
+            )
+            self.assertEqual(
+                command[command.index("--max-turns") + 1],
+                str(run_search.QUICK_MAX_TURNS),
             )
             self.assertIn("MCPTool", command)
             self.assertTrue(payload["ok"])

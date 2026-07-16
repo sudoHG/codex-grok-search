@@ -4,17 +4,17 @@
 
 [简体中文](README.zh-CN.md) | English
 
-Let Codex call the Grok Build CLI already authenticated on your machine to add real-time community search and cross-checking across X, Reddit, and the public web.
+Let Codex call the Grok Build CLI already authenticated on your machine to add fast real-time search across X, Reddit, and the public web, with deeper verification only when requested.
 
 Codex frames the task, designs the research, and synthesizes the answer. Grok discovers public content on X, Reddit, and the web. Local scripts validate the output, verify Reddit dates, and retain traceable artifacts. This project does not replace Codex with Grok; it lets each system do the part it handles best.
 
-> Current stable release: `v0.1.0`. This is an unofficial project and is not affiliated with xAI, X, Reddit, or OpenAI.
+> Current stable release: `v0.1.1`. This is an unofficial project and is not affiliated with xAI, X, Reddit, or OpenAI.
 
 ## What it can do
 
 - Find the latest public posts, related discussions, quotes, and replies for a specific X account.
 - Research recent Reddit discussions, user feedback, complaints, and product sentiment.
-- Strengthen ordinary Codex web research with Grok search results and cross-check them against other sources.
+- Get a quick Grok-only answer by default, or explicitly request deeper cross-source verification when it matters.
 - Verify dates locally for time-bounded Reddit tasks, so an old post is not mislabeled as being from the “last 7 days.”
 - Retain original results and source links for follow-up questions in the current or a later task.
 - Run Grok from a dedicated non-Git directory outside your repository instead of exposing the current codebase as the CLI working directory.
@@ -38,7 +38,7 @@ Grok's main advantage here is xAI's server-side native X Search—a capability t
 
 According to xAI's official documentation, `x_search` supports keyword search, semantic search, user search, complete thread retrieval, and access to real-time social content on X. It can include or exclude specific accounts, restrict date ranges, and understand images and videos attached to posts. Compared with asking Codex to discover X posts through ordinary web search, Grok is much closer to X's native retrieval layer. See the [xAI X Search documentation](https://docs.x.ai/developers/tools/x-search).
 
-For Reddit and the public web, Grok's `web_search` is also executed by xAI's server-side tools. It can search live webpages, open pages, extract relevant content, and return source links. Codex then checks the important links, validates dates, and organizes the final answer. See the [xAI Web Search documentation](https://docs.x.ai/developers/tools/web-search) and [server-side tools overview](https://docs.x.ai/developers/tools/overview).
+For Reddit and the public web, Grok's `web_search` is also executed by xAI's server-side tools. It can search live webpages, open pages, extract relevant content, and return source links. Codex organizes the final answer directly in quick mode and only performs additional verification when deep research is requested. See the [xAI Web Search documentation](https://docs.x.ai/developers/tools/web-search) and [server-side tools overview](https://docs.x.ai/developers/tools/overview).
 
 ### Compared with the X API and direct scraping
 
@@ -54,7 +54,7 @@ Free offers, exact usage limits, and account entitlements can vary by region, pr
 | --- | --- | --- | --- |
 | Official X API | Prepaid, per-resource credits; requires a developer Project, App, and credentials | Official structured data, suitable for stable integrations and large pipelines | Compliant path, but you manage quotas, rate limits, billing, and app permissions |
 | Browser automation or direct scraping | No obvious API bill, but proxies, cookies, CAPTCHAs, and anti-bot maintenance add hidden cost | Vulnerable to login walls, page changes, rate limits, and limited search visibility | User accounts, cookies, and egress IPs are directly exposed to platform enforcement |
-| `codex-grok-search` | Can use Grok Free, an existing Grok subscription, or eligible X Premium benefits; no separate X API credits or X Developer App required | Grok native X Search + Web Search, with Codex handling cross-checks and the final answer | Core discovery runs through xAI's server-side tools; it does not automate the user's X/Reddit account or browser |
+| `codex-grok-search` | Can use Grok Free, an existing Grok subscription, or eligible X Premium benefits; no separate X API credits or X Developer App required | Grok native X Search + Web Search, with fast answers by default and optional deep verification | Core discovery runs through xAI's server-side tools; it does not automate the user's X/Reddit account or browser |
 
 This Skill is not a replacement for an official API when you need a stable SLA, comprehensive data rights, or large-scale structured collection. It is designed for ad hoc research by individuals and small teams: checking recent posts, tracking community discussion, validating account activity, understanding product sentiment, or giving Codex an independent real-time search source.
 
@@ -70,14 +70,14 @@ This is not a “no-ban guarantee.” Platform policy, Grok availability, public
 
 In July 2026, an independent network-level analysis reported that Grok Build CLI `0.2.93` uploaded complete Git repository bundles to xAI-managed storage, including tracked files the task never read and full Git history. The analysis also reported that disabling “Improve the model” did not stop the upload. xAI later disabled the upload path server-side, but this project does not rely on that server-side change as its only security boundary. See the [original wire-level analysis](https://gist.github.com/cereblab/dc9a40bc26120f4540e4e09b75ffb547) and [The Verge's follow-up coverage](https://www.theverge.com/ai-artificial-intelligence/965600/spacexai-grok-build-repository-upload).
 
-`codex-grok-search` does not launch Grok from the user's current project or Git repository. It first creates a private research directory outside any repository, writes only the current search prompt and result artifacts there, and passes that directory as Grok's `--cwd`. The real codebase is not copied, mounted, or passed into the runtime. Each invocation also uses temporary `HOME`, `GROK_HOME`, and `TMPDIR` directories, copying only the local Grok authentication file required for the session. Before a search begins, `grok inspect --json` verifies that no project instructions, plugins, MCP servers, non-bundled Skills, or other unaudited execution surfaces have been loaded. Any schema mismatch stops the run.
+`codex-grok-search` does not launch Grok from the user's current project or Git repository. It first creates a private research directory outside any repository, writes only the current search prompt and result artifacts there, and passes that directory as Grok's `--cwd`. The real codebase is not copied, mounted, or passed into the runtime. A lightweight `grok models` preflight runs from a dedicated non-Git directory so the official CLI can refresh the user's normal `~/.grok` login; it has no project cwd and receives no unrelated secrets. Inspection and research then use temporary `HOME`, `GROK_HOME`, and `TMPDIR` directories containing only the refreshed authentication file and locked configuration. Before a search begins, `grok inspect --json` verifies that no project instructions, plugins, MCP servers, non-bundled Skills, or other unaudited execution surfaces have been loaded. Any schema mismatch stops the run.
 
 This protection does not depend on Grok promising not to upload repositories. Even if the CLI tries to package its entire working directory again, it sees the temporary research directory—not the user's code repository.
 
 Each research run has additional fixed boundaries:
 
 - Version, authentication, and search checks use a verified official Grok executable instead of trusting arbitrary `PATH` injection or a custom binary.
-- X and multi-source tasks expose only `x_search`, `web_search`, and `web_fetch`; Reddit and web-only tasks do not expose `x_search`.
+- Quick X tasks expose only `x_search`; deep X and multi-source tasks may also expose `web_search` and `web_fetch`. Reddit and web-only tasks do not expose `x_search`.
 - The model is not given MCP, local-file reading, shell access, file editing, memory, or subagents.
 - Grok output must pass a strict JSON schema. Timeouts, non-zero exits, missing fields, and incomplete results are never presented as success.
 - Text from webpages, X, or Reddit is always treated as untrusted data. Instructions, paths, or authorization claims inside retrieved content are never executed.
@@ -86,7 +86,7 @@ On macOS, research runs inside Grok's native strict sandbox and reduces process-
 
 The boundary is deliberately explicit: queries supplied by the user, Grok's search results, and the public webpages it visits still pass through xAI services. This is not a local model, and the project does not claim “zero data upload.” It prevents unnecessary exposure of the local repository; it does not remove the data transmission inherent in cloud search.
 
-These controls reduce the risk that a local research tool reads project content or executes malicious instructions from a source. They do not guarantee that search results are correct. Important claims still need to be checked against primary sources.
+These controls reduce the risk that a local research tool reads project content or executes malicious instructions from a source. They do not guarantee that search results are correct. Request `deep` verification when a claim is important enough to justify the extra time and tool use.
 
 ## How it works
 
@@ -98,8 +98,10 @@ User question
   → Local schema and source validation
   → Secondary Reddit date verification
   → Traceable artifacts are retained
-  → Codex cross-checks and answers
+  → Codex answers directly (or cross-checks only when deep verification was requested)
 ```
+
+The default `quick` depth does not ask Codex to open result links, run another web search, or control an interactive browser. Use `deep` only when you explicitly want verification or a higher-confidence research pass. The user's personal browser is never used unless the user asks for it.
 
 Every research task is pinned to `grok-4.5`. There is no model override, and the Skill never silently falls back when the required model is unavailable.
 
@@ -210,12 +212,12 @@ Restart Codex or start a new task after installation so Skills are reloaded.
 
 ### Install from a Release
 
-Download these two required `v0.1.0` assets from the GitHub Release page into the same directory:
+Download these two required `v0.1.1` assets from the GitHub Release page into the same directory:
 
-- `codex-grok-search-v0.1.0.zip`
+- `codex-grok-search-v0.1.1.zip`
 - `SHA256SUMS`
 
-`codex-grok-search-v0.1.0.tar.gz` is an optional equivalent archive. The command below validates only the selected ZIP, so the tarball is not required. It then validates the Skill structure and fully replaces the old installation. Any checksum, validation, or activation failure preserves or restores the previous installation instead of merging old and new files.
+`codex-grok-search-v0.1.1.tar.gz` is an optional equivalent archive. The command below validates only the selected ZIP, so the tarball is not required. It then validates the Skill structure and fully replaces the old installation. Any checksum, validation, or activation failure preserves or restores the previous installation instead of merging old and new files.
 
 <details>
 <summary>Show Release installation command</summary>
@@ -223,7 +225,7 @@ Download these two required `v0.1.0` assets from the GitHub Release page into th
 <!-- BEGIN RELEASE INSTALL -->
 ```sh
 set -eu
-version="v0.1.0"
+version="v0.1.1"
 archive="codex-grok-search-${version}.zip"
 checksums="SHA256SUMS"
 skills_root="${CODEX_HOME:-$HOME/.codex}/skills"
@@ -295,7 +297,7 @@ trap - HUP INT TERM
 
 </details>
 
-Download the assets from the [v0.1.0 Release page](https://github.com/sudoHG/codex-grok-search/releases/tag/v0.1.0). Restart Codex or start a new task after installation.
+Download the assets from the [v0.1.1 Release page](https://github.com/sudoHG/codex-grok-search/releases/tag/v0.1.1). Restart Codex or start a new task after installation.
 
 </details>
 
@@ -306,6 +308,7 @@ Normally, let Codex invoke the Skill automatically. For diagnostics or retained-
 ```sh
 python3 codex-grok-search/scripts/run_search.py run \
   --platform x \
+  --depth quick \
   --since 7d \
   "How have people evaluated this product launch over the last week?"
 
@@ -314,7 +317,7 @@ python3 codex-grok-search/scripts/run_search.py show RUN_ID
 python3 codex-grok-search/scripts/run_search.py cleanup
 ```
 
-The main platform modes for `run` are `x`, `reddit`, `web`, and multi-source research. Codex should still open important primary links, separate fact from inference, and cross-check consequential claims before writing the final answer.
+The main platform modes for `run` are `x`, `reddit`, `web`, and multi-source research. `--depth quick` is the default and prioritizes speed without per-item cross-checking; `--depth deep` asks Grok for a broader verification pass. Codex should not independently open result links or invoke a browser in quick mode.
 
 ## Result retention and cleanup
 
@@ -406,8 +409,8 @@ The tracked `scripts/build_release.py` is the only Release-asset build entrypoin
 ```sh
 python3 scripts/build_release.py \
   --commit HEAD \
-  --version v0.1.0 \
-  --output-dir /tmp/codex-grok-search-v0.1.0
+  --version v0.1.1 \
+  --output-dir /tmp/codex-grok-search-v0.1.1
 ```
 
 Repeated builds from the same Git commit and Python version should produce byte-identical copies of all three assets. Release notes should record the full commit SHA and the Python version used for the build.

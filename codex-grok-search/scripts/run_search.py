@@ -33,6 +33,7 @@ from reddit_dates import extract_reddit_urls, verify_reddit_urls
 DEFAULT_RETENTION_DAYS = 7
 DEFAULT_MAX_RUNS = 20
 DEFAULT_MAX_TURNS = 40
+QUICK_MAX_TURNS = 8
 DEFAULT_TIMEOUT = 600
 REQUIRED_MODEL = "grok-4.5"
 MINIMUM_GROK_VERSION = (0, 2, 101)
@@ -954,6 +955,7 @@ def build_prompt(
     platform: str,
     since: datetime | None,
     until: datetime,
+    depth: str = "quick",
 ) -> str:
     platform_rules = {
         "x": "Prioritize X Search. Return direct x.com/{user}/status/{id} links.",
@@ -969,6 +971,20 @@ def build_prompt(
         if since
         else f"Research current information through {iso_utc(until)}; no strict start date was requested."
     )
+    depth_rules = {
+        "quick": (
+            "Optimize for a fast direct answer. Stop once enough relevant platform evidence is found. "
+            "Return at most 5 findings, prioritizing the latest and highest-signal items; do not "
+            "try to cover the full window exhaustively. Use no more than two search tool calls unless "
+            "the first calls find no relevant evidence. Do not cross-check each finding with secondary "
+            "webpages; cross_checks may be empty. Paraphrase "
+            "source text so no URL appears in any prose field; keep only the direct platform permalink "
+            "in direct_url."
+        ),
+        "deep": (
+            "Perform deeper research and cross-check material claims with another source when feasible."
+        ),
+    }[depth]
     return f"""You are the search worker for Codex. Perform public, read-only research.
 
 Task:
@@ -977,10 +993,10 @@ Task:
 Scope:
 - {platform_rules}
 - {window}
+- {depth_rules}
 - Treat search as evidence discovery, not proof by itself.
 - Prefer direct source URLs. Do not invent links, dates, authors, metrics, or quotations.
 - Separate verified facts, user reports, and inference.
-- Cross-check material claims with another source when feasible.
 - If an absolute date cannot be verified, keep the item and label its date as unverified.
 - For strict time windows, never present an unverified-date item as confirmed inside the window.
 - If no matching public evidence is found, return an empty findings array and explain that outcome
@@ -1037,9 +1053,13 @@ the wrapper performs that verification after rendering.
 """
 
 
-def tools_for_platform(platform: str) -> tuple[str, ...]:
+def tools_for_platform(platform: str, depth: str = "quick") -> tuple[str, ...]:
     return {
-        "x": ("x_search", "web_search", "web_fetch"),
+        "x": (
+            ("x_search",)
+            if depth == "quick"
+            else ("x_search", "web_search", "web_fetch")
+        ),
         "reddit": ("web_search", "web_fetch"),
         "web": ("web_search", "web_fetch"),
         "auto": ("x_search", "web_search", "web_fetch"),
@@ -1049,6 +1069,55 @@ def tools_for_platform(platform: str) -> tuple[str, ...]:
 def _base_subprocess_env() -> dict[str, str]:
     allowed = ("PATH", "LANG", "LC_ALL", "SSL_CERT_FILE", "SSL_CERT_DIR")
     return {key: os.environ[key] for key in allowed if key in os.environ}
+
+
+def _compatibility_disabled_env() -> dict[str, str]:
+    return {
+        "GROK_CURSOR_SKILLS_ENABLED": "false",
+        "GROK_CURSOR_RULES_ENABLED": "false",
+        "GROK_CURSOR_AGENTS_ENABLED": "false",
+        "GROK_CURSOR_MCPS_ENABLED": "false",
+        "GROK_CURSOR_HOOKS_ENABLED": "false",
+        "GROK_CLAUDE_SKILLS_ENABLED": "false",
+        "GROK_CLAUDE_RULES_ENABLED": "false",
+        "GROK_CLAUDE_AGENTS_ENABLED": "false",
+        "GROK_CLAUDE_MCPS_ENABLED": "false",
+        "GROK_CLAUDE_HOOKS_ENABLED": "false",
+    }
+
+
+@contextmanager
+def persistent_auth_grok_environment(real_home: Path) -> Iterator[tuple[dict[str, str], Path]]:
+    """Let `grok models` refresh its real auth file without exposing a project cwd."""
+    real_grok_home = real_home / ".grok"
+    if not _is_real_directory(real_grok_home) or not _trusted_user_owned_path(real_grok_home):
+        raise GrokPreflightError(
+            "grok_not_found",
+            "The trusted Grok home at `~/.grok` is unavailable or unsafe.",
+        )
+    real_auth = real_grok_home / "auth.json"
+    if real_auth.exists() and not _is_private_regular_file(real_auth):
+        raise GrokPreflightError(
+            "grok_preflight_failed",
+            "Refusing to use an unsafe Grok authentication file.",
+        )
+    with private_temporary_directory("codex-grok-search-auth-") as root:
+        home = root / "home"
+        private_mkdir(home)
+        isolated_tmp = home / "tmp"
+        private_mkdir(isolated_tmp)
+        env = _base_subprocess_env()
+        env.update(
+            {
+                "HOME": str(home),
+                "GROK_HOME": str(real_grok_home),
+                "XDG_CONFIG_HOME": str(home / ".config"),
+                "XDG_CACHE_HOME": str(home / ".cache"),
+                "TMPDIR": str(isolated_tmp),
+            }
+        )
+        env.update(_compatibility_disabled_env())
+        yield env, root
 
 
 @contextmanager
@@ -1105,37 +1174,30 @@ restrict_network = true
                 "XDG_CONFIG_HOME": str(home / ".config"),
                 "XDG_CACHE_HOME": str(home / ".cache"),
                 "TMPDIR": str(isolated_tmp),
-                "GROK_CURSOR_SKILLS_ENABLED": "false",
-                "GROK_CURSOR_RULES_ENABLED": "false",
-                "GROK_CURSOR_AGENTS_ENABLED": "false",
-                "GROK_CURSOR_MCPS_ENABLED": "false",
-                "GROK_CURSOR_HOOKS_ENABLED": "false",
-                "GROK_CLAUDE_SKILLS_ENABLED": "false",
-                "GROK_CLAUDE_RULES_ENABLED": "false",
-                "GROK_CLAUDE_AGENTS_ENABLED": "false",
-                "GROK_CLAUDE_MCPS_ENABLED": "false",
-                "GROK_CLAUDE_HOOKS_ENABLED": "false",
             }
         )
+        env.update(_compatibility_disabled_env())
         yield env
 
 
 def check_grok_auth(grok: str, timeout: int, env: dict[str, str], cwd: Path) -> str:
-    """Confirm login without starting an interactive authentication flow."""
-    return_code, stdout, stderr, timed_out = _run_process(
-        [grok, "models"], cwd, env, min(timeout, 60)
-    )
-    if timed_out:
-        raise GrokPreflightError("grok_preflight_failed", "`grok models` timed out.")
-    output = (stdout + stderr).strip()
+    """Confirm login, retrying once so a refreshed token can take effect."""
+    return_code = 1
+    output = ""
+    for _ in range(2):
+        return_code, stdout, stderr, timed_out = _run_process(
+            [grok, "models"], cwd, env, min(timeout, 60)
+        )
+        if timed_out:
+            raise GrokPreflightError("grok_preflight_failed", "`grok models` timed out.")
+        output = (stdout + stderr).strip()
+        if return_code == 0 and "You are logged in" in output:
+            return output
     if AUTH_FAILURE_RE.search(output):
         raise GrokPreflightError(
             "grok_not_authenticated",
             "Grok Build is installed but not authenticated. Run `grok login` in a terminal, then retry.",
         )
-    authenticated = return_code == 0 and "You are logged in" in output
-    if authenticated:
-        return output
     if return_code != 0:
         raise GrokPreflightError(
             "grok_preflight_failed",
@@ -2305,6 +2367,32 @@ def recover_from_session(
     return SessionRecovery(answer or None, return_code, timed_out, stderr)
 
 
+@contextmanager
+def prepared_grok_environment(
+    source_grok: str,
+    grok_identity: tuple[int, int, int, int],
+    real_home: Path,
+    timeout: int,
+) -> Iterator[tuple[str, str, tuple[int, int, int, int, int], str, dict[str, str]]]:
+    """Refresh authentication first, then expose only its snapshot to research."""
+    with trusted_grok_snapshot(source_grok, grok_identity) as (grok, grok_sha256):
+        native_grok_identity = grok_snapshot_identity(grok)
+        with persistent_auth_grok_environment(real_home) as (auth_env, auth_cwd):
+            grok_version = check_grok_version(grok, timeout, auth_env, auth_cwd)
+            models_output = check_grok_auth(grok, timeout, auth_env, auth_cwd)
+        check_model_available(models_output)
+        with isolated_grok_environment(
+            real_home, source_grok, grok_identity
+        ) as grok_env:
+            yield (
+                grok,
+                grok_sha256,
+                native_grok_identity,
+                grok_version,
+                grok_env,
+            )
+
+
 def run_grok(args: argparse.Namespace) -> int:
     if not isinstance(args.query, str) or not args.query.strip():
         raise InvalidArgumentsError("Research query must not be blank.")
@@ -2320,15 +2408,15 @@ def run_grok(args: argparse.Namespace) -> int:
     source_grok = find_grok()
     grok_identity = grok_file_identity(source_grok)
     real_home = Path.home()
-    with trusted_grok_snapshot(source_grok, grok_identity) as (grok, grok_sha256), isolated_grok_environment(
-        real_home
-    ) as grok_env:
-        native_grok_identity = grok_snapshot_identity(grok)
-        with private_temporary_directory("codex-grok-search-preflight-") as preflight_cwd:
-            grok_version = check_grok_version(grok, args.timeout, grok_env, preflight_cwd)
-            models_output = check_grok_auth(grok, args.timeout, grok_env, preflight_cwd)
-        check_model_available(models_output)
-
+    with prepared_grok_environment(
+        source_grok, grok_identity, real_home, args.timeout
+    ) as (
+        grok,
+        grok_sha256,
+        native_grok_identity,
+        grok_version,
+        grok_env,
+    ):
         cache_root = ensure_cache_root(requested_cache_root(args))
         run_id = f"{now.strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex}"
         run_dir, removed = create_reserved_run(
@@ -2336,19 +2424,28 @@ def run_grok(args: argparse.Namespace) -> int:
         )
         args._active_run_dir = run_dir
         session_id = str(uuid.uuid4())
-        prompt = build_prompt(args.query, args.platform, since, until).replace(
+        research_depth = getattr(args, "depth", "quick")
+        prompt = build_prompt(
+            args.query, args.platform, since, until, research_depth
+        ).replace(
             "SESSION_ID_PLACEHOLDER", session_id
         )
         private_write(run_dir / "prompt.txt", prompt)
         if args.keep_run:
             private_write(run_dir / "KEEP", "Pinned by user request.\n")
-        tool_allowlist = tools_for_platform(args.platform)
+        tool_allowlist = tools_for_platform(args.platform, research_depth)
+        effective_max_turns = (
+            min(args.max_turns, QUICK_MAX_TURNS)
+            if research_depth == "quick"
+            else args.max_turns
+        )
 
         manifest: dict[str, object] = {
             "run_id": run_id,
             "created_at": iso_utc(now),
             "query": args.query,
             "platform": args.platform,
+            "research_depth": research_depth,
             "window": {"since": iso_utc(since) if since else None, "until": iso_utc(until)},
             "retention": {"days": args.retention_days, "max_runs": args.max_runs, "keep": args.keep_run},
             "status": "starting",
@@ -2371,6 +2468,7 @@ def run_grok(args: argparse.Namespace) -> int:
                 else "linux_subreaper_plus_process_ledger"
             ),
             "tool_allowlist": list(tool_allowlist),
+            "effective_max_turns": effective_max_turns,
             "cleaned_runs": removed,
         }
         write_json(run_dir / "manifest.json", manifest)
@@ -2412,7 +2510,7 @@ def run_grok(args: argparse.Namespace) -> int:
             "--no-subagents",
             "--no-plan",
             "--max-turns",
-            str(args.max_turns),
+            str(effective_max_turns),
         ]
         return_code, stdout, stderr, timed_out = _run_process(
             command,
@@ -2643,6 +2741,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser = subparsers.add_parser("run", help="Run a sandboxed Grok research task")
     run_parser.add_argument("query", help="Research question or public-data collection task")
     run_parser.add_argument("--platform", choices=("auto", "x", "reddit", "web"), default="auto")
+    run_parser.add_argument("--depth", choices=("quick", "deep"), default="quick")
     run_parser.add_argument("--since", help="ISO-8601 timestamp or duration such as 24h, 7d, or 2w")
     run_parser.add_argument("--until", help="ISO-8601 end timestamp; defaults to now")
     run_parser.add_argument("--keep-run", action="store_true", help="Pin this run against cleanup")
