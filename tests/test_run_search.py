@@ -64,6 +64,15 @@ def complete_payload(session_id: str, platform: str = "x"):
 
 
 class RunSearchTests(unittest.TestCase):
+    def setUp(self):
+        self._fake_home = tempfile.TemporaryDirectory()
+        fake_home = Path(self._fake_home.name)
+        (fake_home / ".grok").mkdir(mode=0o700)
+        self._home_patch = patch("run_search.Path.home", return_value=fake_home)
+        self._home_patch.start()
+        self.addCleanup(self._fake_home.cleanup)
+        self.addCleanup(self._home_patch.stop)
+
     def make_args(self, cache_root: Path, **overrides):
         values = {
             "query": "example",
