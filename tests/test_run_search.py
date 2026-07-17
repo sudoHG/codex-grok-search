@@ -257,49 +257,11 @@ class RunSearchTests(unittest.TestCase):
         self.assertEqual(run_search.tools_for_platform("reddit"), ("web_search", "web_fetch"))
         self.assertEqual(run_search.tools_for_platform("web"), ("web_search", "web_fetch"))
 
-    def test_version_preflight_enforces_minimum(self):
-        old = SimpleNamespace(stdout="grok 0.2.100", stderr="", returncode=0)
-        current = SimpleNamespace(stdout="grok 0.2.101 (build)", stderr="", returncode=0)
-        future_patch = SimpleNamespace(stdout="grok 0.2.102", stderr="", returncode=0)
-        future_schema = SimpleNamespace(stdout="grok 0.3.0", stderr="", returncode=0)
-        with tempfile.TemporaryDirectory() as tmp, patch(
-            "run_search._run_process",
-            return_value=(current.returncode, current.stdout, current.stderr, False),
-        ):
-            self.assertIn(
-                "0.2.101", run_search.check_grok_version("grok", 30, {}, Path(tmp))
-            )
-        with tempfile.TemporaryDirectory() as tmp, patch(
-            "run_search._run_process",
-            return_value=(old.returncode, old.stdout, old.stderr, False),
-        ):
-            with self.assertRaises(run_search.GrokPreflightError) as raised:
-                run_search.check_grok_version("grok", 30, {}, Path(tmp))
-            self.assertEqual(raised.exception.code, "grok_version_unsupported")
-        with tempfile.TemporaryDirectory() as tmp, patch(
-            "run_search._run_process",
-            return_value=(
-                future_patch.returncode,
-                future_patch.stdout,
-                future_patch.stderr,
-                False,
-            ),
-        ):
-            with self.assertRaises(run_search.GrokPreflightError) as raised:
-                run_search.check_grok_version("grok", 30, {}, Path(tmp))
-            self.assertEqual(raised.exception.code, "grok_version_unsupported")
-        with tempfile.TemporaryDirectory() as tmp, patch(
-            "run_search._run_process",
-            return_value=(
-                future_schema.returncode,
-                future_schema.stdout,
-                future_schema.stderr,
-                False,
-            ),
-        ):
-            with self.assertRaises(run_search.GrokPreflightError) as raised:
-                run_search.check_grok_version("grok", 30, {}, Path(tmp))
-            self.assertEqual(raised.exception.code, "grok_version_unsupported")
+    def test_cli_version_is_not_a_preflight_gate(self):
+        source = (SCRIPTS / "run_search.py").read_text(encoding="utf-8")
+        self.assertNotIn("--version", source)
+        self.assertNotIn("grok_version_unsupported", source)
+        self.assertFalse(hasattr(run_search, "check_grok_version"))
 
     def test_missing_grok_fails_before_cache_creation(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -701,7 +663,7 @@ class RunSearchTests(unittest.TestCase):
             grok_home = run_dir / "home" / ".grok"
             env = {"GROK_HOME": str(grok_home)}
             clean = {
-                "grokVersion": "0.2.101",
+                "grokVersion": "0.2.102",
                 "channel": "unknown",
                 "cwd": str(run_dir),
                 "projectRoot": None,
@@ -1413,8 +1375,6 @@ time.sleep(10)
         ), patch(
             "run_search.isolated_grok_environment", fake_environment
         ), patch(
-            "run_search.check_grok_version", return_value="grok 0.2.101"
-        ), patch(
             "run_search.check_grok_auth", return_value="Available models: grok-4.5"
         ), patch("run_search.inspect_isolation", return_value=(True, "{}")), patch(
             "run_search._run_process", side_effect=fake_process
@@ -1545,8 +1505,6 @@ time.sleep(10)
         ), patch(
             "run_search.isolated_grok_environment", fake_environment
         ), patch(
-            "run_search.check_grok_version", return_value="grok 0.2.101"
-        ), patch(
             "run_search.check_grok_auth", return_value="Available models: grok-4.5"
         ), patch("run_search.inspect_isolation", return_value=(True, "{}")), patch(
             "run_search._run_process",
@@ -1596,8 +1554,6 @@ time.sleep(10)
         ), patch(
             "run_search.isolated_grok_environment", fake_environment
         ), patch(
-            "run_search.check_grok_version", return_value="grok 0.2.101"
-        ), patch(
             "run_search.check_grok_auth", return_value="Available models: grok-4.5"
         ), patch("run_search.inspect_isolation", return_value=(True, "{}")), patch(
             "run_search._run_process", side_effect=fake_process
@@ -1637,8 +1593,6 @@ time.sleep(10)
         ), patch(
             "run_search.isolated_grok_environment", fake_environment
         ), patch(
-            "run_search.check_grok_version", return_value="grok 0.2.101"
-        ), patch(
             "run_search.check_grok_auth", return_value="Available models: grok-4.5"
         ), patch("run_search.inspect_isolation", return_value=(True, "{}")), patch(
             "run_search._run_process",
@@ -1661,8 +1615,6 @@ time.sleep(10)
             "run_search.grok_snapshot_identity", return_value=(1, 2, 3, 4, 5)
         ), patch(
             "run_search.isolated_grok_environment", fake_environment
-        ), patch(
-            "run_search.check_grok_version", return_value="grok 0.2.101"
         ), patch(
             "run_search.check_grok_auth", return_value="Available models: grok-4.5"
         ), patch("run_search.inspect_isolation", return_value=(True, "{}")), patch(
@@ -1696,8 +1648,6 @@ time.sleep(10)
             "run_search.grok_snapshot_identity", return_value=(1, 2, 3, 4, 5)
         ), patch(
             "run_search.isolated_grok_environment", fake_environment
-        ), patch(
-            "run_search.check_grok_version", return_value="grok 0.2.101"
         ), patch(
             "run_search.check_grok_auth", return_value="Available models: grok-4.5"
         ), patch("run_search.inspect_isolation", return_value=(True, "{}")), patch(
@@ -1740,8 +1690,6 @@ time.sleep(10)
         ), patch(
             "run_search.isolated_grok_environment", fake_environment
         ), patch(
-            "run_search.check_grok_version", return_value="grok 0.2.101"
-        ), patch(
             "run_search.check_grok_auth", return_value="Available models: grok-4.5"
         ), patch("run_search.inspect_isolation", return_value=(True, "{}")), patch(
             "run_search._run_process",
@@ -1778,8 +1726,6 @@ time.sleep(10)
             "run_search.grok_snapshot_identity", return_value=(1, 2, 3, 4, 5)
         ), patch(
             "run_search.isolated_grok_environment", fake_environment
-        ), patch(
-            "run_search.check_grok_version", return_value="grok 0.2.101"
         ), patch(
             "run_search.check_grok_auth",
             return_value="You are logged in\nAvailable models: grok-4.5",

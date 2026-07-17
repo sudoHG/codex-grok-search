@@ -90,7 +90,6 @@ Reuse the `run_id` returned earlier in the same user task instead of repeating t
 - `grok_not_authenticated`: ask the user to run `grok login` in a terminal, then retry. Do not start an interactive login automatically and do not request credentials in chat.
 - `grok_auth_unconfirmed`: ask the user to run `grok models` and then `grok login` if needed.
 - `grok_preflight_failed`: report that Grok's model check failed for a non-authentication reason; do not tell the user to log in unless Grok explicitly reported an authentication failure.
-- `grok_version_unconfirmed` or `grok_version_unsupported`: ask the user to run `grok --version`; this Skill accepts only the audited CLI version 0.2.101 and must be reviewed before using any other version.
 - `grok_model_unavailable`: report that `grok-4.5` is required but unavailable; do not silently fall back.
 - `isolation_check_failed`: stop. Do not run Grok where project instructions are loaded.
 - `grok_timed_out`, `grok_execution_failed`, `session_recovery_failed`, or `incomplete_result_artifact`: report failure. Retained partial-result and session-export diagnostic files must never be presented as a completed answer.

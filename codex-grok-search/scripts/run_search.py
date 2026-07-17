@@ -36,8 +36,6 @@ DEFAULT_MAX_TURNS = 40
 QUICK_MAX_TURNS = 8
 DEFAULT_TIMEOUT = 600
 REQUIRED_MODEL = "grok-4.5"
-MINIMUM_GROK_VERSION = (0, 2, 101)
-MAXIMUM_GROK_VERSION_EXCLUSIVE = (0, 2, 102)
 SANDBOX_PROFILE = "codex-grok-search"
 MAX_ARTIFACT_BYTES = 16 * 1024 * 1024
 CACHE_MARKER = ".codex-grok-search-cache-v1"
@@ -1223,30 +1221,6 @@ def confirm_postflight_auth(
     return "authenticated", None
 
 
-def check_grok_version(grok: str, timeout: int, env: dict[str, str], cwd: Path) -> str:
-    return_code, stdout, stderr, timed_out = _run_process(
-        [grok, "--version"], cwd, env, min(timeout, 30)
-    )
-    if timed_out:
-        raise GrokPreflightError("grok_version_unconfirmed", "`grok --version` timed out.")
-    output = (stdout + stderr).strip()
-    match = re.search(r"\bgrok\s+(\d+)\.(\d+)\.(\d+)\b", output, re.IGNORECASE)
-    if return_code != 0 or not match:
-        raise GrokPreflightError(
-            "grok_version_unconfirmed",
-            "Could not parse `grok --version`. Update Grok Build and retry.",
-        )
-    version = tuple(int(part) for part in match.groups())
-    if version < MINIMUM_GROK_VERSION or version >= MAXIMUM_GROK_VERSION_EXCLUSIVE:
-        required = ".".join(str(part) for part in MINIMUM_GROK_VERSION)
-        installed = ".".join(str(part) for part in version)
-        raise GrokPreflightError(
-            "grok_version_unsupported",
-            f"Grok Build {installed} is outside the audited range; exactly version {required} is required.",
-        )
-    return output
-
-
 def check_model_available(models_output: str) -> None:
     pattern = re.compile(rf"(?<![A-Za-z0-9_.-]){re.escape(REQUIRED_MODEL)}(?![A-Za-z0-9_.-])")
     if pattern.search(models_output):
@@ -1296,7 +1270,7 @@ def inspect_isolation(
     }
     if set(payload) != expected_top_level:
         return False, output
-    if payload["grokVersion"] != "0.2.101" or payload["channel"] != "unknown":
+    if payload["channel"] != "unknown":
         return False, output
     if not isinstance(payload["cwd"], str):
         return False, output
@@ -2373,12 +2347,11 @@ def prepared_grok_environment(
     grok_identity: tuple[int, int, int, int],
     real_home: Path,
     timeout: int,
-) -> Iterator[tuple[str, str, tuple[int, int, int, int, int], str, dict[str, str]]]:
+) -> Iterator[tuple[str, str, tuple[int, int, int, int, int], dict[str, str]]]:
     """Refresh authentication first, then expose only its snapshot to research."""
     with trusted_grok_snapshot(source_grok, grok_identity) as (grok, grok_sha256):
         native_grok_identity = grok_snapshot_identity(grok)
         with persistent_auth_grok_environment(real_home) as (auth_env, auth_cwd):
-            grok_version = check_grok_version(grok, timeout, auth_env, auth_cwd)
             models_output = check_grok_auth(grok, timeout, auth_env, auth_cwd)
         check_model_available(models_output)
         with isolated_grok_environment(
@@ -2388,7 +2361,6 @@ def prepared_grok_environment(
                 grok,
                 grok_sha256,
                 native_grok_identity,
-                grok_version,
                 grok_env,
             )
 
@@ -2414,7 +2386,6 @@ def run_grok(args: argparse.Namespace) -> int:
         grok,
         grok_sha256,
         native_grok_identity,
-        grok_version,
         grok_env,
     ):
         cache_root = ensure_cache_root(requested_cache_root(args))
@@ -2452,7 +2423,6 @@ def run_grok(args: argparse.Namespace) -> int:
             "grok_binary": source_grok,
             "grok_execution": "private_snapshot",
             "grok_snapshot_sha256": grok_sha256,
-            "grok_version": grok_version,
             "grok_auth_preflight": "authenticated",
             "grok_model": REQUIRED_MODEL,
             "grok_session_id": session_id,

@@ -8,7 +8,7 @@ Do not include Grok authentication files, tokens, private search queries, retain
 
 ## Supported versions
 
-Security fixes are applied to the latest published release. The current stable release supports only Grok Build CLI `0.2.101`; other Grok Build versions fail closed until their inspect schema and execution surfaces are reviewed.
+Security fixes are applied to the latest published release. The Skill does not use the Grok Build version string as a security boundary; it validates the actual isolated runtime configuration and fails closed when execution surfaces or the inspect schema drift.
 
 ## Security boundary
 

@@ -32,7 +32,7 @@ jobs:
         run: |
           python scripts/build_release.py \
             --commit HEAD \
-            --version v0.1.1 \
+            --version v0.1.2 \
             --output-dir "$RUNNER_TEMP/codex-grok-search-release"
           cd "$RUNNER_TEMP/codex-grok-search-release"
           sha256sum --check SHA256SUMS
