@@ -8,7 +8,7 @@
 
 Codex 负责理解任务、设计检索和整理结论；Grok 负责发现 X、Reddit 与网页上的公开内容；本地脚本负责校验输出、核对 Reddit 日期并保留可追溯的结果。它不是用 Grok 替代 Codex，而是让两者各自做更擅长的部分。
 
-> 当前稳定版本：`v0.1.2`。项目非官方，与 xAI、X、Reddit 或 OpenAI 均无隶属关系。
+> 当前稳定版本：`v0.1.3`。项目非官方，与 xAI、X、Reddit 或 OpenAI 均无隶属关系。
 
 ## 它能做什么
 
@@ -212,12 +212,12 @@ trap - HUP INT TERM
 
 ### 从 Release 安装
 
-从 GitHub Release 页面下载下列两个必需的 `v0.1.2` 资产，并放在同一个目录：
+从 GitHub Release 页面下载下列两个必需的 `v0.1.3` 资产，并放在同一个目录：
 
-- `codex-grok-search-v0.1.2.zip`
+- `codex-grok-search-v0.1.3.zip`
 - `SHA256SUMS`
 
-`codex-grok-search-v0.1.2.tar.gz` 是可选的内容相同备用格式。下面的命令只校验并安装你选择的 ZIP，不要求同时下载 tar.gz；随后验证 Skill 结构并完整替换旧版本。任何校验或切换失败都会保留或恢复原安装，不会把新旧文件合并。
+`codex-grok-search-v0.1.3.tar.gz` 是可选的内容相同备用格式。下面的命令只校验并安装你选择的 ZIP，不要求同时下载 tar.gz；随后验证 Skill 结构并完整替换旧版本。任何校验或切换失败都会保留或恢复原安装，不会把新旧文件合并。
 
 <details>
 <summary>展开 Release 安装命令</summary>
@@ -225,7 +225,7 @@ trap - HUP INT TERM
 <!-- BEGIN RELEASE INSTALL -->
 ```sh
 set -eu
-version="v0.1.2"
+version="v0.1.3"
 archive="codex-grok-search-${version}.zip"
 checksums="SHA256SUMS"
 skills_root="${CODEX_HOME:-$HOME/.codex}/skills"
@@ -297,7 +297,7 @@ trap - HUP INT TERM
 
 </details>
 
-请从 [v0.1.2 Release 页面](https://github.com/sudoHG/codex-grok-search/releases/tag/v0.1.2)下载资产。安装完成后，重启 Codex 或新建一个任务。
+请从 [v0.1.3 Release 页面](https://github.com/sudoHG/codex-grok-search/releases/tag/v0.1.3)下载资产。安装完成后，重启 Codex 或新建一个任务。
 
 </details>
 
@@ -410,8 +410,8 @@ python3 "${CODEX_HOME:-$HOME/.codex}/skills/.system/skill-creator/scripts/quick_
 ```sh
 python3 scripts/build_release.py \
   --commit HEAD \
-  --version v0.1.2 \
-  --output-dir /tmp/codex-grok-search-v0.1.2
+  --version v0.1.3 \
+  --output-dir /tmp/codex-grok-search-v0.1.3
 ```
 
 同一 Python 版本和同一 Git commit 的重复构建应得到字节级相同的三个资产。发布时应在 Release notes 中记录完整 commit SHA 和构建环境的 Python 版本。
