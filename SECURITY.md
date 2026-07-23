@@ -8,8 +8,8 @@ Do not include Grok authentication files, tokens, private search queries, retain
 
 ## Supported versions
 
-Security fixes are applied to the latest published release. The Skill does not use the Grok Build version string as a security boundary; it validates the actual isolated runtime configuration and fails closed when execution surfaces or the inspect schema drift.
+Security fixes are applied to the latest published release. The Skill does not use the Grok Build version string, output shape, source platform, URL scheme, or an `inspect` schema as a runtime gate.
 
 ## Security boundary
 
-This project isolates Grok from the user's current repository and limits the tools exposed during research. Queries, search results, and public pages still pass through xAI services. See [Privacy isolation and security boundaries](README.md#privacy-isolation-and-security-boundaries) for the complete threat model and limitations.
+This project runs Grok from a private directory outside the user's current repository and passes only a temporary authentication/configuration home. Queries, search results, and public pages still pass through xAI services. Returned research content is not locally validated for correctness. See [Privacy isolation and security boundaries](README.md#privacy-isolation-and-security-boundaries) for the complete boundary and limitations.

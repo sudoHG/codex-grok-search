@@ -1,4 +1,4 @@
 interface:
   display_name: "Codex + Grok Search"
-  short_description: "Grok-powered X, Reddit, and web research for Codex."
-  default_prompt: "Use $codex-grok-search first for current X or Reddit content. Default to a quick Grok-only answer without Codex browser verification."
+  short_description: "Thin isolated Grok bridge for X, Reddit, and web search."
+  default_prompt: "Use $codex-grok-search to search with Grok from an isolated directory and return Grok’s complete answer without automatic browser verification."
