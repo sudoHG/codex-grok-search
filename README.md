@@ -392,6 +392,7 @@ rm -rf "$HOME/.cache/codex-grok-search"
 - Reddit dates are checked by a separate local verifier rather than accepted from model output alone.
 - At most 20 Reddit URLs are actively fetched for verification. Additional candidates are retained and marked `verification_limit_exceeded`.
 - A result whose absolute date cannot be confirmed is labeled `date unverified` and cannot support a strict time-window claim.
+- If an otherwise valid payload contains a claimed timestamp outside the requested window, the wrapper omits that finding, drops cross-checks that reference it, replaces the model summary with a neutral local summary, and reports `result_repair`. It never changes a known date to `unverified`.
 - Every source link must match an allowed platform URL. Invalid URLs, control characters, unknown fields, or session mismatches cause the result to be rejected.
 - Search coverage is best-effort and is not guaranteed to exhaust all matching platform content.
 

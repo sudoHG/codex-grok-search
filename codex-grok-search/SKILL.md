@@ -57,7 +57,8 @@ The wrapper has no model override and always passes `--model grok-4.5`. If prefl
   - `verified` plus `within_window: true`: may support a strict time-window claim.
   - `verified` plus `within_window: false`: keep only when useful, but state that it is outside the requested window.
   - `unverified`: keep when relevant and label `日期未验证`; never count it as confirmed inside a strict window.
-- For X and web results, the wrapper rejects verified claimed timestamps outside the requested window while retaining `unverified` dates. Disclose that accepted X timestamps are not independently revalidated locally.
+- When an otherwise valid model payload contains claimed timestamps outside the requested window, the wrapper omits only those findings, drops every cross-check that references them, replaces the model summary with a neutral local summary, and records the change in `result_repair`. It never relabels a known date as `unverified`; every other schema error still fails closed.
+- For X and web results, disclose that retained claimed timestamps passed the structural window check but are not independently revalidated locally.
 
 Read [references/reliability.md](references/reliability.md) when debugging truncated output, missing result files, isolation failures, Reddit date conflicts, cache retention, or Grok authentication.
 
@@ -92,7 +93,7 @@ Reuse the `run_id` returned earlier in the same user task instead of repeating t
 - `grok_preflight_failed`: report that Grok's model check failed for a non-authentication reason; do not tell the user to log in unless Grok explicitly reported an authentication failure.
 - `grok_model_unavailable`: report that `grok-4.5` is required but unavailable; do not silently fall back.
 - `isolation_check_failed`: stop. Do not run Grok where project instructions are loaded.
-- `grok_timed_out`, `grok_execution_failed`, `session_recovery_failed`, or `incomplete_result_artifact`: report failure. Retained partial-result and session-export diagnostic files must never be presented as a completed answer.
+- `grok_timed_out`, `grok_execution_failed`, `session_recovery_failed`, or `incomplete_result_artifact`: report failure, including the returned `validation_error` when present. Retained partial-result and session-export diagnostic files must never be presented as a completed answer.
 - `interrupted`: report that the user interruption was handled after child cleanup; do not use partial artifacts.
 - `process_cleanup_unconfirmed`: stop and preserve the active lease for conservative later cleanup; do not delete the run or present partial artifacts.
 - `grok_binary_changed`: stop; the official CLI changed while the private execution snapshot was being prepared.

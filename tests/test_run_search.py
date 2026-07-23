@@ -375,6 +375,8 @@ class RunSearchTests(unittest.TestCase):
         self.assertIn("Return exactly one JSON object", prompt)
         self.assertIn("additional fields are forbidden", prompt)
         self.assertIn("label its date as unverified", prompt)
+        self.assertIn("Omit known out-of-window sources from findings", prompt)
+        self.assertIn("instead of relabeling their dates as unverified", prompt)
         self.assertIn("Reddit", prompt)
         self.assertIn("Optimize for a fast direct answer", prompt)
         self.assertIn("Return at most 5 findings", prompt)
@@ -529,7 +531,11 @@ class RunSearchTests(unittest.TestCase):
                 path = self.make_run(root, run_id, f"2026-07-15T00:00:{index:02d}Z")
                 oldest = oldest or path
             new_id = "20260715T235959Z-ffffffffffffffffffffffffffffffff"
-            run_dir, removed = run_search.create_reserved_run(root, new_id, 7, 20)
+            with patch(
+                "run_search.utc_now",
+                return_value=datetime(2026, 7, 16, tzinfo=timezone.utc),
+            ):
+                run_dir, removed = run_search.create_reserved_run(root, new_id, 7, 20)
             self.assertEqual(len([p for p in root.iterdir() if run_search._valid_run_dir(p)]), 20)
             self.assertIn(oldest.name, removed)
             self.assertTrue(run_dir.exists())
@@ -855,6 +861,74 @@ class RunSearchTests(unittest.TestCase):
                 unverified, session_id, "x", since, until
             )[0]
         )
+
+    def test_window_repair_omits_only_out_of_window_findings(self):
+        session_id = "019f63ec-45aa-7423-be08-6e6ad6394f31"
+        since = datetime(2026, 7, 8, tzinfo=timezone.utc)
+        until = datetime(2026, 7, 15, 23, 59, tzinfo=timezone.utc)
+        payload = complete_payload(session_id)
+        outside = dict(payload["findings"][0])
+        outside.update(
+            {
+                "id": "F2",
+                "claimed_publication_time": "2024-10-16T00:00:00Z",
+                "direct_url": "https://x.com/example/status/9876543210",
+            }
+        )
+        payload["findings"].append(outside)
+        payload["cross_checks"].extend(
+            [
+                {
+                    "finding_ids": ["F1", "F2"],
+                    "stance": "context",
+                    "source_url": "https://example.com/mixed-context",
+                    "summary": "Context for both findings",
+                },
+                {
+                    "finding_ids": ["F2"],
+                    "stance": "supports",
+                    "source_url": "https://example.com/old-only",
+                    "summary": "Context only for the old finding",
+                },
+            ]
+        )
+        original = json.loads(json.dumps(payload))
+
+        repaired, details = run_search.repair_out_of_window_payload(
+            payload, session_id, "x", since, until
+        )
+
+        self.assertIsNotNone(repaired)
+        self.assertEqual(payload, original)
+        self.assertEqual([item["id"] for item in repaired["findings"]], ["F1"])
+        self.assertNotEqual(repaired["summary"], payload["summary"])
+        self.assertIn("omitted 1 finding", repaired["summary"][0])
+        self.assertEqual(
+            [item["finding_ids"] for item in repaired["cross_checks"]],
+            [["F1"]],
+        )
+        self.assertEqual(details["removed_finding_ids"], ["F2"])
+        self.assertEqual(details["cross_checks_dropped"], 2)
+        self.assertTrue(
+            run_search.validate_result_payload(
+                repaired, session_id, "x", since, until
+            )[0]
+        )
+
+    def test_window_repair_refuses_payload_with_any_other_schema_error(self):
+        session_id = "019f63ec-45aa-7423-be08-6e6ad6394f31"
+        since = datetime(2026, 7, 8, tzinfo=timezone.utc)
+        until = datetime(2026, 7, 15, 23, 59, tzinfo=timezone.utc)
+        payload = complete_payload(session_id)
+        payload["findings"][0]["claimed_publication_time"] = "2024-10-16T00:00:00Z"
+        payload["findings"][0]["direct_url"] = "https://invalid.example/source"
+
+        repaired, details = run_search.repair_out_of_window_payload(
+            payload, session_id, "x", since, until
+        )
+
+        self.assertIsNone(repaired)
+        self.assertIsNone(details)
 
     def test_result_schema_rejects_injection_missing_fields_and_bad_urls(self):
         session_id = "019f63ec-45aa-7423-be08-6e6ad6394f31"
@@ -1399,6 +1473,78 @@ time.sleep(10)
             self.assertTrue(payload["ok"])
             self.assertTrue(Path(payload["result_path"]).is_file())
 
+    def test_run_completes_after_conservative_window_repair(self):
+        @contextmanager
+        def fake_environment(*_):
+            yield {"HOME": "/isolated"}
+
+        @contextmanager
+        def fake_snapshot(*_):
+            yield "/fake/snapshot/grok", "a" * 64
+
+        def fake_process(command, *_args, **_kwargs):
+            session_id = command[command.index("--session-id") + 1]
+            result = complete_payload(session_id)
+            outside = dict(result["findings"][0])
+            outside.update(
+                {
+                    "id": "F2",
+                    "claimed_publication_time": "2024-10-16T00:00:00Z",
+                    "direct_url": "https://x.com/example/status/9876543210",
+                }
+            )
+            result["findings"].append(outside)
+            result["cross_checks"].append(
+                {
+                    "finding_ids": ["F2"],
+                    "stance": "context",
+                    "source_url": "https://example.com/old-context",
+                    "summary": "Context only for the old finding",
+                }
+            )
+            return (
+                0,
+                json.dumps(
+                    {"text": json.dumps(result), "sessionId": session_id}
+                ),
+                "",
+                False,
+            )
+
+        with tempfile.TemporaryDirectory() as tmp, patch(
+            "run_search.find_grok", return_value="/fake/grok"
+        ), patch(
+            "run_search.grok_file_identity", return_value=(1, 2, 3, 4)
+        ), patch("run_search.trusted_grok_snapshot", fake_snapshot), patch(
+            "run_search.grok_snapshot_identity", return_value=(1, 2, 3, 4, 5)
+        ), patch(
+            "run_search.isolated_grok_environment", fake_environment
+        ), patch(
+            "run_search.check_grok_auth", return_value="Available models: grok-4.5"
+        ), patch("run_search.inspect_isolation", return_value=(True, "{}")), patch(
+            "run_search._run_process", side_effect=fake_process
+        ), patch("run_search.verify_reddit_urls", return_value=[]), patch(
+            "run_search.recover_from_session"
+        ) as recover:
+            args = self.make_args(
+                Path(tmp) / "runs",
+                since="2026-07-01T00:00:00Z",
+                until="2026-07-20T00:00:00Z",
+            )
+            with patch("builtins.print") as printed:
+                self.assertEqual(run_search.run_grok(args), 0)
+                status = json.loads(printed.call_args.args[0])
+
+            recover.assert_not_called()
+            self.assertTrue(status["ok"])
+            self.assertEqual(status["result_repair"]["removed_finding_ids"], ["F2"])
+            run_dir = next((Path(tmp) / "runs").glob("20*"))
+            manifest = run_search.load_manifest(run_dir)
+            self.assertEqual(manifest["result_repair"], status["result_repair"])
+            result = json.loads((run_dir / "result.json").read_text(encoding="utf-8"))
+            self.assertEqual([item["id"] for item in result["findings"]], ["F1"])
+            self.assertIn("omitted 1 finding", result["summary"][0])
+
     def test_macos_native_sandbox_bypass_is_explicit_and_profile_locked(self):
         with run_search.private_temporary_directory(
             "codex-grok-search-binary-"
@@ -1571,6 +1717,8 @@ time.sleep(10)
                 self.assertEqual(run_search.run_grok(args), 1)
                 payload = json.loads(printed.call_args.args[0])
             self.assertEqual(payload["error"], "incomplete_result_artifact")
+            self.assertEqual(payload["validation_error"], "invalid_direct_url")
+            self.assertIn("invalid_direct_url", payload["message"])
             run_dir = next((Path(tmp) / "runs").glob("20*"))
             manifest = run_search.load_manifest(run_dir)
             self.assertEqual(manifest["result_validation_error"], "invalid_direct_url")

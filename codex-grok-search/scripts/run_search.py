@@ -969,6 +969,15 @@ def build_prompt(
         if since
         else f"Research current information through {iso_utc(until)}; no strict start date was requested."
     )
+    window_evidence_rule = (
+        "Include a finding with a known absolute date only when that date is inside the hard "
+        "requested window. Omit known out-of-window sources from findings instead of relabeling "
+        "their dates as unverified. Older background may appear only as a context cross-check tied "
+        "to a retained in-window finding."
+        if since
+        else "Omit findings dated after the requested cutoff instead of relabeling a known date as "
+        "unverified."
+    )
     depth_rules = {
         "quick": (
             "Optimize for a fast direct answer. Stop once enough relevant platform evidence is found. "
@@ -997,6 +1006,7 @@ Scope:
 - Separate verified facts, user reports, and inference.
 - If an absolute date cannot be verified, keep the item and label its date as unverified.
 - For strict time windows, never present an unverified-date item as confirmed inside the window.
+- {window_evidence_rule}
 - If no matching public evidence is found, return an empty findings array and explain that outcome
   in summary and limitations. Never invent a finding merely to make the array non-empty.
 
@@ -2253,6 +2263,109 @@ def parse_result_text(
     return None, last_error
 
 
+def repair_out_of_window_payload(
+    payload: object,
+    expected_session_id: str,
+    requested_platform: str,
+    since: datetime | None,
+    until: datetime | None,
+) -> tuple[dict[str, object] | None, dict[str, object] | None]:
+    """Omit only dated out-of-window findings from an otherwise valid payload."""
+    valid_without_window, _ = validate_result_payload(
+        payload, expected_session_id, requested_platform
+    )
+    if not valid_without_window or not isinstance(payload, dict):
+        return None, None
+
+    removed_ids = {
+        str(finding["id"])
+        for finding in payload["findings"]
+        if not _claimed_time_in_window(
+            finding["claimed_publication_time"], since, until
+        )
+    }
+    if not removed_ids:
+        return None, None
+
+    retained_findings = [
+        dict(finding)
+        for finding in payload["findings"]
+        if str(finding["id"]) not in removed_ids
+    ]
+    retained_cross_checks = []
+    dropped_cross_checks = 0
+    for cross_check in payload["cross_checks"]:
+        if any(
+            finding_id in removed_ids
+            for finding_id in cross_check["finding_ids"]
+        ):
+            dropped_cross_checks += 1
+            continue
+        retained_cross_checks.append(dict(cross_check))
+
+    removed_count = len(removed_ids)
+    retained_count = len(retained_findings)
+    finding_word = "finding" if removed_count == 1 else "findings"
+    repaired = dict(payload)
+    repaired["summary"] = [
+        f"Local strict-window validation retained {retained_count} findings and omitted "
+        f"{removed_count} {finding_word} whose claimed timestamp was outside the requested "
+        "window; the original summary was removed so omitted evidence cannot influence it."
+    ]
+    repaired["findings"] = retained_findings
+    repaired["cross_checks"] = retained_cross_checks
+    valid_repair, _ = validate_result_payload(
+        repaired, expected_session_id, requested_platform, since, until
+    )
+    if not valid_repair:
+        return None, None
+
+    return repaired, {
+        "applied": True,
+        "reason": "finding_outside_requested_window",
+        "removed_finding_ids": sorted(removed_ids),
+        "removed_findings": removed_count,
+        "retained_findings": retained_count,
+        "cross_checks_dropped": dropped_cross_checks,
+        "summary_replaced": True,
+    }
+
+
+def parse_result_text_for_run(
+    text: str | None,
+    expected_session_id: str,
+    requested_platform: str,
+    since: datetime | None = None,
+    until: datetime | None = None,
+) -> tuple[
+    dict[str, object] | None,
+    str | None,
+    dict[str, object] | None,
+]:
+    payload, error = parse_result_text(
+        text, expected_session_id, requested_platform, since, until
+    )
+    if payload is not None or error != "finding_outside_requested_window" or not text:
+        return payload, error, None
+
+    decoder = json.JSONDecoder()
+    for index, character in enumerate(text):
+        if character != "{":
+            continue
+        try:
+            candidate, end = decoder.raw_decode(text[index:])
+        except (json.JSONDecodeError, RecursionError, MemoryError):
+            continue
+        if text[index + end :].strip():
+            continue
+        repaired, repair_details = repair_out_of_window_payload(
+            candidate, expected_session_id, requested_platform, since, until
+        )
+        if repaired is not None:
+            return repaired, None, repair_details
+    return None, error, None
+
+
 def _markdown_plain(value: str) -> str:
     escaped = html.escape(value, quote=False)
     return re.sub(r"([\\`*_{}\[\]()#+.!|>-])", r"\\\1", escaped)
@@ -2496,7 +2609,7 @@ def run_grok(args: argparse.Namespace) -> int:
             manifest["timed_out"] = True
 
         raw_result = _extract_json_report(stdout, session_id) if return_code == 0 else None
-        result_payload, validation_error = parse_result_text(
+        result_payload, validation_error, result_repair = parse_result_text_for_run(
             raw_result, session_id, args.platform, since, until
         )
         result_source = "grok_json"
@@ -2506,7 +2619,7 @@ def run_grok(args: argparse.Namespace) -> int:
                 grok, run_dir, session_id, args.timeout, grok_env
             )
             raw_result = recovery.result_text
-            result_payload, validation_error = parse_result_text(
+            result_payload, validation_error, result_repair = parse_result_text_for_run(
                 raw_result, session_id, args.platform, since, until
             )
             result_source = "session_export"
@@ -2546,7 +2659,8 @@ def run_grok(args: argparse.Namespace) -> int:
                 message = "Grok session recovery exited with an error; diagnostics were retained."
             else:
                 error_code = "incomplete_result_artifact"
-                message = "Grok did not produce a complete result matching the strict JSON schema."
+                validation_detail = validation_error or "unknown_validation_error"
+                message = f"Grok result failed strict validation: {validation_detail}."
             manifest.update(
                 {
                     "status": "failed",
@@ -2558,14 +2672,19 @@ def run_grok(args: argparse.Namespace) -> int:
                 }
             )
             write_json(run_dir / "manifest.json", manifest)
-            print(
-                json.dumps(
-                    {"ok": False, "run_id": run_id, "error": error_code, "message": message},
-                    ensure_ascii=False,
-                )
-            )
+            failure_status = {
+                "ok": False,
+                "run_id": run_id,
+                "error": error_code,
+                "message": message,
+            }
+            if validation_error:
+                failure_status["validation_error"] = validation_error
+            print(json.dumps(failure_status, ensure_ascii=False))
             return 1
 
+        if result_repair:
+            manifest["result_repair"] = result_repair
         structured_result_path = run_dir / "result.json"
         write_json(structured_result_path, result_payload)
         result_path = run_dir / "result.md"
@@ -2603,19 +2722,17 @@ def run_grok(args: argparse.Namespace) -> int:
             }
         )
         write_json(run_dir / "manifest.json", manifest)
-        print(
-            json.dumps(
-                {
-                    "ok": True,
-                    "run_id": run_id,
-                    "status": "complete",
-                    "result_path": str(result_path),
-                    "reddit_verification_path": str(verification_path),
-                    "result_source": result_source,
-                },
-                ensure_ascii=False,
-            )
-        )
+        success_status = {
+            "ok": True,
+            "run_id": run_id,
+            "status": "complete",
+            "result_path": str(result_path),
+            "reddit_verification_path": str(verification_path),
+            "result_source": result_source,
+        }
+        if result_repair:
+            success_status["result_repair"] = result_repair
+        print(json.dumps(success_status, ensure_ascii=False))
         return 0
 
 
